@@ -1,0 +1,446 @@
+* {
+box-sizing: border-box;
+-webkit-tap-highlight-color: transparent;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #1e242b;
+    color: #ecf0f1;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.view {
+    min-height: 100vh;
+    padding-bottom: 30px;
+}
+
+.container {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 12px;
+}
+
+/* Karten & Layout */
+.card {
+    background: #28303a;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+}
+
+.login-card {
+    max-width: 380px;
+    margin: 60px auto;
+    padding: 24px;
+}
+
+h1, h2, h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+h1 { font-size: 1.5rem; text-align: center; }
+h2 { font-size: 1.15rem; color: #f39c12; }
+h3 { font-size: 1rem; color: #bdc3c7; }
+
+.subtitle, .hint {
+    font-size: 0.88rem;
+    color: #95a5a6;
+    margin-bottom: 14px;
+}
+
+.subtitle { text-align: center; }
+
+label {
+    display: block;
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+    color: #bdc3c7;
+}
+
+input[type="text"], input[type="password"] {
+    width: 100%;
+    padding: 11px;
+    margin-bottom: 14px;
+    border-radius: 6px;
+    border: 1px solid #455261;
+    background: #1a2026;
+    color: #fff;
+    font-size: 1rem;
+}
+
+/* Buttons */
+.btn {
+    display: inline-block;
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background: #3b4654;
+    color: #fff;
+    text-align: center;
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-block { width: 100%; padding: 13px; font-size: 1.05rem; }
+.btn-small { padding: 6px 10px; font-size: 0.82rem; }
+.btn-primary { background: #2980b9; }
+.btn-confirm { background: #27ae60; margin-bottom: 14px; }
+.btn-secondary { background: #3b4654; }
+.btn-danger { background: #c0392b; }
+.btn-outline { background: transparent; border: 1px solid #576574; color: #dfe6e9; }
+.btn-active-mode { background: #e67e22 !important; color: #fff !important; }
+
+/* Kopfleiste */
+.top-bar {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+    background: #161b20;
+    padding: 10px 14px;
+    border-bottom: 1px solid #333e4b;
+}
+
+.badge {
+    background: #f39c12;
+    color: #161b20;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-left: 6px;
+}
+
+/* Listen & Gegner-Auswahl */
+.game-item {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+    background: #1f262e;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border-left: 4px solid #576574;
+    cursor: pointer;
+}
+
+.game-item.my-turn { border-left-color: #2ecc71; background: #213029; }
+.game-item.waiting-tomorrow { border-left-color: #f39c12; }
+
+.opponent-grid {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+    margin: -4px;
+}
+
+.opp-btn {
+    margin: 4px;
+    padding: 8px 12px;
+    background: #34495e;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    border: 1px solid #4a627a;
+}
+
+.opp-btn.bot-btn {
+    background: #2c2840;
+    border-color: #6c5ce7;
+}
+
+/* Leaderboard Tabelle */
+.table-wrap { overflow-x: auto; }
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.leaderboard-table th, .leaderboard-table td {
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid #35404d;
+}
+.leaderboard-table th { color: #95a5a6; }
+
+/* Banner & 60s Fortschrittsbalken */
+.turn-banner {
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 10px;
+    background: #34495e;
+}
+.turn-banner.green { background: #1e8449; }
+.turn-banner.orange { background: #b9770e; }
+.turn-banner.blue { background: #1f618d; }
+
+.timer-box {
+    background: #192026;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #3d4a58;
+}
+.timer-labels {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+.progress-track {
+    width: 100%;
+    height: 10px;
+    background: #2c3e50;
+    border-radius: 5px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #f39c12;
+    transition: width 0.3s linear;
+}
+.progress-fill.ready {
+    background: #2ecc71;
+}
+
+.player-strip {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 4px 2px;
+}
+.material-info { color: #f1c40f; font-size: 0.88rem; }
+
+/* ================= SCHACHBRETT ================= */
+.board-wrapper {
+    position: relative;
+    width: 100%;
+    padding-bottom: 100%; /* 1:1 Quadrat auch auf iOS 10 */
+    margin: 4px 0 10px 0;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    border: 3px solid #4a3728;
+}
+
+.chessboard {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+}
+
+.square {
+    position: relative;
+    width: 12.5%;
+    height: 12.5%;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.sq-light { background-color: #f0d9b5; color: #b58863; }
+.sq-dark  { background-color: #b58863; color: #f0d9b5; }
+
+/* Koordinaten am Rand */
+.coord-rank {
+    position: absolute;
+    top: 2px; left: 3px;
+    font-size: 0.62rem;
+    font-weight: bold;
+    pointer-events: none;
+}
+.coord-file {
+    position: absolute;
+    bottom: 1px; right: 3px;
+    font-size: 0.62rem;
+    font-weight: bold;
+    pointer-events: none;
+}
+
+/* Markierungen & Lernhilfen auf dem Brett */
+.sq-selected { background-color: #7b9f35 !important; }
+.sq-last-move { background-color: rgba(241, 196, 15, 0.52) !important; }
+
+/* Bedrohungs-Radar (Hängende / Angegriffene eigene Figuren) */
+.sq-hanging {
+    box-shadow: inset 0 0 0 4px #e74c3c !important;
+    background-color: rgba(231, 76, 60, 0.35) !important;
+}
+.sq-attacked {
+    box-shadow: inset 0 0 0 3px #e67e22 !important;
+}
+
+/* Heatmap (Raumkontrolle) */
+.sq-heat-mine { box-shadow: inset 0 0 12px rgba(41, 128, 185, 0.65); }
+.sq-heat-opp  { box-shadow: inset 0 0 12px rgba(192, 57, 43, 0.65); }
+.sq-heat-both { box-shadow: inset 0 0 12px rgba(142, 68, 173, 0.65); }
+
+/* Mögliche Züge (Grüner Punkt / Roter Schlag-Ring) */
+.legal-dot {
+    position: absolute;
+    width: 28%;
+    height: 28%;
+    border-radius: 50%;
+    background: rgba(39, 174, 96, 0.75);
+    pointer-events: none;
+    z-index: 3;
+}
+.legal-capture {
+    position: absolute;
+    width: 86%;
+    height: 86%;
+    border-radius: 50%;
+    border: 4px solid rgba(231, 76, 60, 0.8);
+    pointer-events: none;
+    z-index: 3;
+}
+
+.piece-svg {
+    width: 86%;
+    height: 86%;
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Pfeil-Overlay */
+.arrow-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 4;
+}
+
+/* Steuerleisten & Lernhilfen-Schalter */
+.control-row {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.control-row .btn {
+    -webkit-flex: 1;
+    flex: 1;
+    margin: 0 3px;
+    font-size: 0.82rem;
+    padding: 9px 6px;
+}
+
+.warning-banner {
+    background: #922b21;
+    border: 1px solid #e74c3c;
+    color: #fff;
+    padding: 9px 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.helpers-grid {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+}
+.toggle-item {
+    width: 50%;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    font-size: 0.84rem;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+.toggle-item input { margin-right: 7px; }
+.toggle-item.disabled-helper { opacity: 0.4; }
+
+.draw-banner {
+    background: #2c3e50;
+    border: 1px solid #f39c12;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+    font-size: 0.86rem;
+}
+
+.error-msg {
+    color: #ff6b6b;
+    font-size: 0.88rem;
+    margin-bottom: 10px;
+}
+
+/* Modals */
+.modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    z-index: 20;
+    padding: 16px;
+}
+.modal-content {
+    background: #28303a;
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 400px;
+    width: 100%;
+}
+.promo-buttons {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+}
+.promo-btn { width: 46%; margin: 2%; font-size: 1.1rem; }
+.rules-list { padding-left: 18px; font-size: 0.88rem; line-height: 1.45; }
+.rules-list li { margin-bottom: 8px; }

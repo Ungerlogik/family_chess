@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Familien-Schach</title>
+
+  <!-- PWA & iOS Home-Screen Unterstützung -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Schach">
+
+  <link rel="stylesheet" href="style.css">
+  <!-- Bewährte ES5-kompatible chess.js Version für Regelprüfung (läuft auch auf iOS 10) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+</head>
+<body>
+
+  <!-- ================= LOGIN-ANSICHT ================= -->
+  <div id="view-login" class="view">
+    <div class="card login-card">
+      <h1>♟️ Familien-Schach</h1>
+      <p class="subtitle">Maximal 1 Zug pro Tag · 60s Bedenkzeit</p>
+
+      <label for="inp-name">Dein Vorname</label>
+      <input type="text" id="inp-name" placeholder="z. B. Toni" autocomplete="off">
+
+      <label for="inp-pw">Familien-Passwort</label>
+      <input type="password" id="inp-pw" placeholder="Passwort eingeben">
+
+      <div id="login-error" class="error-msg"></div>
+      <button id="btn-login" class="btn btn-primary btn-block">Anmelden &amp; Merken</button>
+    </div>
+  </div>
+
+  <!-- ================= LOBBY & LEADERBOARD ================= -->
+  <div id="view-lobby" class="view hidden">
+    <header class="top-bar">
+      <div>
+        <strong id="lbl-user-name">Spieler</strong>
+        <span id="lbl-user-elo" class="badge">500 Elo</span>
+      </div>
+      <div>
+        <button id="btn-refresh" class="btn btn-small">↻ Aktualisieren</button>
+        <button id="btn-logout" class="btn btn-small btn-outline">Abmelden</button>
+      </div>
+    </header>
+
+    <div class="container">
+      <!-- Offene Partien -->
+      <section class="card">
+        <h2>Deine aktiven Partien</h2>
+        <div id="list-active-games" class="list-group"></div>
+      </section>
+
+      <!-- Neue Partie starten -->
+      <section class="card">
+        <h2>Neue Partie starten</h2>
+        <p class="hint">Klicke auf ein Familienmitglied oder einen Bot (Farbe wird ausgelost):</p>
+        <div id="list-opponents" class="opponent-grid"></div>
+      </section>
+
+      <!-- Leaderboard -->
+      <section class="card">
+        <h2>🏆 Familien-Leaderboard</h2>
+        <div class="table-wrap">
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Elo</th>
+                <th>S</th>
+                <th>R</th>
+                <th>N</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-leaderboard"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Beendete Partien -->
+      <section class="card">
+        <h2>Letzte Ergebnisse</h2>
+        <div id="list-finished-games" class="list-group"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ================= SPIELBRETT-ANSICHT ================= -->
+  <div id="view-game" class="view hidden">
+    <header class="top-bar">
+      <button id="btn-back-lobby" class="btn btn-small">← Zurück</button>
+      <div id="game-title-bar" class="game-header-info">Partie</div>
+      <button id="btn-rules-modal" class="btn btn-small btn-outline">Hilfe</button>
+    </header>
+
+    <div class="container game-container">
+      <!-- Status- & 60s-Timer-Balken -->
+      <div id="turn-banner" class="turn-banner">Lade Partie...</div>
+
+      <div id="timer-box" class="timer-box hidden">
+        <div class="timer-labels">
+          <span id="timer-text">Sandkasten-Phase: Figuren frei ausprobieren!</span>
+          <strong id="timer-sec">60s</strong>
+        </div>
+        <div class="progress-track">
+          <div id="timer-bar" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Gegner-Leiste + Material -->
+      <div class="player-strip">
+        <span id="lbl-top-player">Gegner</span>
+        <span id="lbl-top-material" class="material-info"></span>
+      </div>
+
+      <!-- Schachbrett + SVG-Overlay für Pfeile -->
+      <div class="board-wrapper" id="board-wrapper">
+        <div id="chessboard" class="chessboard"></div>
+        <svg id="arrow-overlay" class="arrow-overlay" viewBox="0 0 800 800" preserveAspectRatio="none"></svg>
+      </div>
+
+      <!-- Eigene Leiste + Material -->
+      <div class="player-strip">
+        <span id="lbl-bottom-player">Du</span>
+        <span id="lbl-bottom-material" class="material-info"></span>
+      </div>
+
+      <!-- Gefahren-Warnung (Patzer-Schutz in den 60s) -->
+      <div id="blunder-warning" class="warning-banner hidden"></div>
+
+      <!-- Haupt-Steuerung für den Zug -->
+      <div id="sandbox-controls" class="control-row">
+        <button id="btn-reset-sandbox" class="btn btn-secondary">↺ Stellung zurücksetzen</button>
+        <button id="btn-arrow-mode" class="btn btn-secondary">↗ Pfeil malen: AUS</button>
+        <button id="btn-clear-arrows" class="btn btn-outline">Pfeile löschen</button>
+      </div>
+
+      <button id="btn-submit-move" class="btn btn-confirm btn-block" disabled>
+        Zug endgültig absenden
+      </button>
+
+      <!-- Lern-Hilfen (Ein-/Ausschaltbar) -->
+      <div class="card helpers-card">
+        <h3>🎓 Lern-Hilfen (Vertrauensbasis)</h3>
+        <div class="helpers-grid">
+          <label class="toggle-item">
+            <input type="checkbox" id="chk-legal" checked>
+            <span>Mögliche Züge (Punkte)</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="chk-lastmove" checked>
+            <span>Letzten Zug zeigen</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="chk-material" checked>
+            <span>Material-Waage</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="chk-heatmap">
+            <span>Raumkontrolle (Heatmap)</span>
+          </label>
+          <label class="toggle-item sandbox-only" id="lbl-chk-radar">
+            <input type="checkbox" id="chk-radar" checked>
+            <span>⏱️ Bedrohungs-Radar (nur 60s)</span>
+          </label>
+          <label class="toggle-item sandbox-only" id="lbl-chk-blunder">
+            <input type="checkbox" id="chk-blunder" checked>
+            <span>⏱️ Patzer-Warnung (nur 60s)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Partie-Aktionen (Remis / Aufgeben / Beenden) -->
+      <div class="card actions-card">
+        <div id="draw-offer-banner" class="draw-banner hidden">
+          <span>Dein Gegner bietet dir ein Remis (Unentschieden) an!</span>
+          <button id="btn-accept-draw" class="btn btn-primary btn-small">Remis annehmen</button>
+        </div>
+        <div class="control-row">
+          <button id="btn-offer-draw" class="btn btn-outline">½ Remis anbieten</button>
+          <button id="btn-resign-abort" class="btn btn-danger">🏳️ Aufgeben</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BAUERN-UMWANDLUNG MODAL ================= -->
+  <div id="modal-promote" class="modal hidden">
+    <div class="modal-content">
+      <h3>Bauern umwandeln in:</h3>
+      <div class="promo-buttons">
+        <button data-piece="q" class="btn promo-btn">♕ Dame</button>
+        <button data-piece="r" class="btn promo-btn">♖ Turm</button>
+        <button data-piece="b" class="btn promo-btn">♗ Läufer</button>
+        <button data-piece="n" class="btn promo-btn">♘ Springer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STEUERUNG & REGELBUCH MODAL ================= -->
+  <div id="modal-rules" class="modal hidden">
+    <div class="modal-content">
+      <h3>🎮 Steuerung auf dem Brett</h3>
+      <ul class="rules-list">
+        <li><strong>Figur bewegen (2-Tipp-Steuerung):</strong> Tippe zuerst deine Figur an (grüne Punkte zeigen mögliche Wege) und tippe danach auf das Zielfeld.</li>
+        <li><strong>60s Sandkasten-Modus:</strong> Nach dem Öffnen der Partie läuft ein 60-Sekunden-Timer. Währenddessen kannst du beliebig viele Züge (auch für den Gegner) zur Probe auf dem Brett durchspielen!</li>
+        <li><strong>Stellung zurücksetzen:</strong> Mit <em>„↺ Stellung zurücksetzen“</em> kehrst du jederzeit zur echten Ausgangsstellung zurück.</li>
+        <li><strong>Pfeile malen:</strong> Schalte <em>„↗ Pfeil malen“</em> auf <strong>AN</strong>. Tippe dann erst auf ein Startfeld und danach auf ein Zielfeld, um einen Pfeil zu zeichnen.</li>
+        <li><strong>Zug absenden:</strong> Nach Ablauf der 60 Sekunden muss genau <strong>dein 1 geplanter Zug</strong> auf dem Brett stehen – dann wird der grüne Bestätigen-Button aktiv.</li>
+      </ul>
+
+      <h3>📖 Familien-Regeln &amp; Spezialzüge</h3>
+      <ul class="rules-list">
+        <li><strong>1 Zug pro Tag:</strong> Jeder Spieler darf pro Partie 1× am Kalendertag ziehen (Reset um 00:00 Uhr). Gegen Computer-Bots antwortet der Bot sofort, du hast aber auch gegen Bots 1 Zug pro Tag.</li>
+        <li><strong>Rochade:</strong> Tippe auf den König und ziehe ihn 2 Felder Richtung Turm – der Turm springt automatisch drüber.</li>
+        <li><strong>En Passant:</strong> Zieht ein gegnerischer Bauer aus der Startreihe 2 Felder vor direkt neben deinen Bauern, kannst du ihn im direkt nächsten Zug schräg dahinter schlagen.</li>
+      </ul>
+      <button id="btn-close-rules" class="btn btn-primary btn-block">Verstanden</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

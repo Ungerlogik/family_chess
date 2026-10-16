@@ -1,0 +1,9 @@
+{
+  "name": "Familien-Schach",
+  "short_name": "Schach",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1e242b",
+  "theme_color": "#2c3e50",
+  "orientation": "portrait"
+}
