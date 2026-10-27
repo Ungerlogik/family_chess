@@ -5,6 +5,8 @@
 // 1. SUPABASE KONFIGURATION
 var SUPABASE_URL = 'https://tkxwgshnsxvvrwghmois.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRreHdnc2huc3h2dnJ3Z2htb2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNzg5MDcsImV4cCI6MjEwNzc1NDkwN30.DyNlKFtStR0sOPsYjJHxZPRL11YoqReMv2QMMKTNJ04';
+var VAPID_PUBLIC_KEY = 'BA-9ii-6pQbhCMLo-MEvNUMc5ejBU5R5-fkOk4LX3n2ea8cK_VTIjpahOmu-ajl0bz3xkLmIb-G1UxPxykqK6b0';
+
 
 var ELO_K_FACTOR = 20;
 var SANDBOX_WAIT_SECONDS = 60;
@@ -1366,6 +1368,43 @@ function updateSubmitButtonState() {
     }
 }
 
+// Hilfsfunktion für den deutschen Benachrichtigungstext:
+function formatGermanMoveText(playerName, move, statusInfo) {
+    var pieceNames = {
+        p: 'Bauer',
+        n: 'Springer',
+        b: 'Läufer',
+        r: 'Turm',
+        q: 'Dame',
+        k: 'König'
+    };
+
+    if (move.san === 'O-O' || move.san === 'O-O-O') {
+        return playerName + ' hat rochiert';
+    }
+
+    var piece = pieceNames[move.piece] || 'Figur';
+    var text = playerName + ' hat ' + piece + ' auf ' + move.to + ' gezogen';
+
+    if (move.captured) {
+        var capPiece = pieceNames[move.captured] || 'Figur';
+        text = playerName + ' hat mit ' + piece + ' auf ' + move.to + ' (' + capPiece + ') geschlagen';
+    }
+
+    if (move.promotion) {
+        var promoPiece = pieceNames[move.promotion] || 'Dame';
+        text += ' (Umwandlung in ' + promoPiece + ')';
+    }
+
+    if (statusInfo && statusInfo.status !== 'active' && statusInfo.reason) {
+        text += ' – ' + statusInfo.reason;
+    } else if (move.san.indexOf('+') !== -1) {
+        text += ' (Schach!)';
+    }
+
+    return text;
+}
+
 function submitFinalMove() {
     var hist = state.chess.history({ verbose: true });
     if (!state.canMoveToday || state.sandboxSecondsLeft > 0 || hist.length !== 1) return;
@@ -1404,6 +1443,10 @@ function submitFinalMove() {
         if (updatedGame.status === 'active' && isBotPlayer(nextPlayerName)) {
             triggerBotTurn(updatedGame, nextPlayerName);
         } else {
+            // Push-Benachrichtigung an das Familienmitglied senden:
+            var moveText = formatGermanMoveText(state.userName, move, statusInfo);
+            sendPushToOpponent(nextPlayerName, moveText, updatedGame.id);
+
             syncLobby(function () {
                 openGame(updatedGame.id);
             });
@@ -1636,6 +1679,8 @@ document.addEventListener('DOMContentLoaded', function () {
         syncLobby();
     };
 
+    document.getElementById('btn-push-toggle').onclick = enablePushNotifications;
+
     document.getElementById('btn-logout').onclick = function () {
         localStorage.removeItem('fc_name');
         localStorage.removeItem('fc_pw');
@@ -1863,3 +1908,78 @@ document.addEventListener('DOMContentLoaded', function () {
         document.head.appendChild(favIcon);
     } catch (e) {}
 })();
+
+
+/* ============================================================================
+ * 13. WEB-PUSH REGISTRIERUNG & VERSAND (ES5-KOMPATIBEL)
+ * ============================================================================ */
+function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    var rawData = window.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+function enablePushNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        alert('Dein Browser unterstützt leider keine Web-Push-Benachrichtigungen. (Tipp auf iPhone: Erst über „Teilen -> Zum Home-Bildschirm“ hinzufügen!)');
+        return;
+    }
+
+    var btn = document.getElementById('btn-push-toggle');
+    btn.textContent = '⏳...';
+
+    navigator.serviceWorker.register('./sw.js').then(function (registration) {
+        return Notification.requestPermission().then(function (permission) {
+            if (permission !== 'granted') {
+                throw new Error('Benachrichtigungen wurden nicht erlaubt.');
+            }
+            return registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+        });
+    }).then(function (subscription) {
+        var subJson = subscription.toJSON();
+        callRpc('rpc_save_push_sub', {
+            pw: state.password,
+            p_player: state.userName,
+            p_endpoint: subJson.endpoint,
+            p_p256dh: subJson.keys.p256dh,
+            p_auth: subJson.keys.auth
+        }, function (err) {
+            if (err) {
+                alert('Fehler beim Speichern: ' + err);
+                btn.textContent = '🔔 Push';
+                return;
+            }
+            btn.textContent = '🔔 Aktiv';
+            btn.classList.add('btn-active-mode');
+            localStorage.setItem('fc_push_enabled', '1');
+            alert('Push-Benachrichtigungen für ' + state.userName + ' sind jetzt auf diesem Gerät aktiv!');
+        });
+    }).catch(function (err) {
+        btn.textContent = '🔔 Push';
+        alert(err.message || 'Push konnte nicht aktiviert werden.');
+    });
+}
+
+function sendPushToOpponent(targetPlayerName, messageBody, gameId) {
+    if (!targetPlayerName || isBotPlayer(targetPlayerName)) return;
+
+    // Ruft die Supabase Edge Function auf (oder einen eigenen Webhook)
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', SUPABASE_URL + '/functions/v1/send-push', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + SUPABASE_KEY);
+    xhr.send(JSON.stringify({
+        targetPlayer: targetPlayerName,
+        title: '♟️ Familien-Schach',
+        body: messageBody,
+        gameId: gameId
+    }));
+}
