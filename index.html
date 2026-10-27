@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Schach">
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
   <!-- Bewährte ES5-kompatible chess.js Version für Regelprüfung (läuft auch auf iOS 10) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 </head>
@@ -34,7 +34,7 @@
     </div>
   </div>
 
-  <!-- ================= LOBBY & LEADERBOARD ================= -->
+  <!-- ================= HAUPTANSICHT MIT NAVIGATION (STARTSEITE / HIGHSCORE / HISTORIE) ================= -->
   <div id="view-lobby" class="view hidden">
     <header class="top-bar">
       <div>
@@ -47,52 +47,134 @@
       </div>
     </header>
 
+    <!-- Haupt-Tab-Navigation -->
+    <nav class="main-tabs">
+      <button id="tab-btn-home" class="tab-btn active" data-tab="tab-home">🏠 Startseite</button>
+      <button id="tab-btn-highscore" class="tab-btn" data-tab="tab-highscore">🏆 Highscore</button>
+      <button id="tab-btn-history" class="tab-btn" data-tab="tab-history">📜 Historie</button>
+    </nav>
+
     <div class="container">
-      <!-- Offene Partien -->
-      <section class="card">
-        <h2>Deine aktiven Partien</h2>
-        <div id="list-active-games" class="list-group"></div>
-      </section>
 
-      <!-- Neue Partie starten -->
-      <section class="card">
-        <h2>Neue Partie starten</h2>
-        <p class="hint">Klicke auf ein Familienmitglied oder einen Bot (Farbe wird ausgelost):</p>
-        <div id="list-opponents" class="opponent-grid"></div>
-      </section>
+      <!-- ================= TAB 1: STARTSEITE ================= -->
+      <div id="tab-home" class="tab-pane">
+        <!-- Persönliche Elo- & Status-Karte -->
+        <section class="card hero-card">
+          <div class="hero-main">
+            <div>
+              <span class="hero-label">Deine aktuelle Wertung</span>
+              <div class="hero-elo-row">
+                <span id="hero-elo-value" class="hero-elo">500</span>
+                <span class="hero-elo-unit">Elo</span>
+                <span id="hero-rank-badge" class="rank-pill">Platz –</span>
+              </div>
+              <div id="hero-stats-line" class="hero-stats">0 Siege · 0 Remis · 0 Niederlagen</div>
+            </div>
+            <button id="btn-goto-highscore" class="btn btn-primary btn-small">🏆 Zum Highscore →</button>
+          </div>
+        </section>
 
-      <!-- Leaderboard -->
-      <section class="card">
-        <h2>🏆 Familien-Leaderboard</h2>
-        <div class="table-wrap">
-          <table class="leaderboard-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Elo</th>
-                <th>S</th>
-                <th>R</th>
-                <th>N</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-leaderboard"></tbody>
-          </table>
-        </div>
-      </section>
+        <!-- Aktive Partien Übersicht -->
+        <section class="card">
+          <div class="section-header">
+            <h2>🎯 Deine aktiven Spiele</h2>
+            <span id="badge-active-count" class="count-pill">0</span>
+          </div>
+          <div id="list-active-games" class="list-group"></div>
+        </section>
 
-      <!-- Beendete Partien -->
-      <section class="card">
-        <h2>Letzte Ergebnisse</h2>
-        <div id="list-finished-games" class="list-group"></div>
-      </section>
+        <!-- Spiel gegen Botgnus starten (mit Schieberegler & 1-Bot-Sperre) -->
+        <section class="card bot-card">
+          <div class="section-header">
+            <h2>🤖 Gegen Botgnus spielen</h2>
+            <span id="bot-status-pill" class="count-pill bot-pill">Bereit</span>
+          </div>
+          <p class="hint">Stelle mit dem Schieberegler ein, wie viele Züge (Halbzüge) Botgnus im Voraus berechnet:</p>
+
+          <div class="bot-slider-box">
+            <div class="bot-slider-labels">
+              <span>Stärke (Rechentiefe):</span>
+              <strong id="lbl-bot-depth-info" class="bot-depth-badge">2 Züge im Voraus (Leicht)</strong>
+            </div>
+            <input type="range" id="inp-bot-depth" class="bot-slider" min="1" max="5" step="1" value="2">
+            <div class="bot-slider-ticks">
+              <span>1</span>
+              <span>2</span>
+              <span>3</span>
+              <span>4</span>
+              <span>5</span>
+            </div>
+          </div>
+
+          <div id="bot-active-hint" class="bot-lock-notice hidden">
+            🔒 Du hast bereits ein laufendes Spiel gegen Botgnus. Es kann maximal ein Bot-Spiel gleichzeitig aktiv sein.
+          </div>
+
+          <button id="btn-start-bot" class="btn btn-bot btn-block">🤖 Spiel gegen Botgnus starten</button>
+        </section>
+
+        <!-- Neue Partie gegen Familienmitglieder starten -->
+        <section class="card">
+          <h2>👥 Gegen Familie spielen</h2>
+          <p class="hint">Tippe auf ein Familienmitglied, um eine neue Partie zu starten (Farbe wird ausgelost):</p>
+          <div id="list-opponents" class="opponent-grid"></div>
+        </section>
+      </div>
+
+      <!-- ================= TAB 2: HIGHSCORE ================= -->
+      <div id="tab-highscore" class="tab-pane hidden">
+        <section class="card">
+          <div class="section-header">
+            <h2>🏆 Familien-Highscore</h2>
+          </div>
+          <p class="hint">Rangliste aller Familienmitglieder nach aktueller Elo-Wertung (ohne Bots):</p>
+          <div class="table-wrap">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Elo</th>
+                  <th>S</th>
+                  <th>R</th>
+                  <th>N</th>
+                  <th>Quote</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-leaderboard"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================= TAB 3: HISTORIE ================= -->
+      <div id="tab-history" class="tab-pane hidden">
+        <section class="card">
+          <div class="section-header">
+            <h2>📜 Deine Spiel-Historie</h2>
+            <span id="badge-history-count" class="count-pill">0 Partien</span>
+          </div>
+          <p class="hint">Alle deine abgeschlossenen Partien. Tippe ein Spiel an, um alle Züge auf dem Brett nachzuspielen:</p>
+
+          <!-- Filter-Leiste für eigene Ergebnisse -->
+          <div class="history-filters">
+            <button class="hist-filter-btn active" data-filter="all">Alle</button>
+            <button class="hist-filter-btn" data-filter="win">🏆 Siege</button>
+            <button class="hist-filter-btn" data-filter="draw">🤝 Remis</button>
+            <button class="hist-filter-btn" data-filter="loss">❌ Niederlagen</button>
+          </div>
+
+          <div id="list-finished-games" class="list-group"></div>
+        </section>
+      </div>
+
     </div>
   </div>
 
   <!-- ================= SPIELBRETT-ANSICHT ================= -->
   <div id="view-game" class="view hidden">
     <header class="top-bar">
-      <button id="btn-back-lobby" class="btn btn-small">← Zurück</button>
+      <button id="btn-back-lobby" class="btn btn-small">← Startseite</button>
       <div id="game-title-bar" class="game-header-info">Partie</div>
       <button id="btn-rules-modal" class="btn btn-small btn-outline">Hilfe</button>
     </header>
@@ -111,7 +193,7 @@
         </div>
       </div>
 
-      <!-- Gegner-Leiste + Material -->
+      <!-- Gegner-Leiste + Geschlagene Figuren + Material -->
       <div class="player-strip">
         <span id="lbl-top-player">Gegner</span>
         <span id="lbl-top-material" class="material-info"></span>
@@ -123,7 +205,7 @@
         <svg id="arrow-overlay" class="arrow-overlay" viewBox="0 0 800 800" preserveAspectRatio="none"></svg>
       </div>
 
-      <!-- Eigene Leiste + Material -->
+      <!-- Eigene Leiste + Geschlagene Figuren + Material -->
       <div class="player-strip">
         <span id="lbl-bottom-player">Du</span>
         <span id="lbl-bottom-material" class="material-info"></span>
@@ -132,16 +214,32 @@
       <!-- Gefahren-Warnung (Patzer-Schutz in den 60s) -->
       <div id="blunder-warning" class="warning-banner hidden"></div>
 
-      <!-- Haupt-Steuerung für den Zug -->
+      <!-- Haupt-Steuerung für den Sandkasten & Zug -->
       <div id="sandbox-controls" class="control-row">
-        <button id="btn-reset-sandbox" class="btn btn-secondary">↺ Stellung zurücksetzen</button>
-        <button id="btn-arrow-mode" class="btn btn-secondary">↗ Pfeil malen: AUS</button>
-        <button id="btn-clear-arrows" class="btn btn-outline">Pfeile löschen</button>
+        <button id="btn-undo-sandbox" class="btn btn-secondary" disabled>← 1 Zug zurück</button>
+        <button id="btn-reset-sandbox" class="btn btn-secondary" disabled>↺ Zurücksetzen</button>
+        <button id="btn-arrow-mode" class="btn btn-secondary">↗ Pfeil: AUS</button>
+        <button id="btn-clear-arrows" class="btn btn-outline">✕ Pfeile</button>
       </div>
 
       <button id="btn-submit-move" class="btn btn-confirm btn-block" disabled>
         Zug endgültig absenden
       </button>
+
+      <!-- Kompakte Zughistorie & Vor-/Zurück-Navigation -->
+      <div id="move-history-card" class="card history-replay-card">
+        <div class="section-header">
+          <h3>📋 Zughistorie &amp; Verlauf</h3>
+          <span id="lbl-replay-step" class="count-pill">Aktuell</span>
+        </div>
+        <div id="move-list-strip" class="move-list-strip">Noch keine Züge gespielt.</div>
+        <div class="control-row replay-controls">
+          <button id="btn-rep-start" class="btn btn-secondary btn-small" title="Zum Start">⏮ Start</button>
+          <button id="btn-rep-prev" class="btn btn-secondary btn-small" title="1 Halbzug zurück">◀ Zurück</button>
+          <button id="btn-rep-next" class="btn btn-secondary btn-small" title="1 Halbzug vor">Vor ▶</button>
+          <button id="btn-rep-end" class="btn btn-secondary btn-small" title="Zur aktuellen Stellung">Aktuell ⏭</button>
+        </div>
+      </div>
 
       <!-- Lern-Hilfen (Ein-/Ausschaltbar) -->
       <div class="card helpers-card">
@@ -157,25 +255,30 @@
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="chk-material" checked>
-            <span>Material-Waage</span>
+            <span>Material &amp; Schlagbeute</span>
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="chk-heatmap">
-            <span>Raumkontrolle (Heatmap)</span>
+            <span>Feld-Dominanz (Heatmap)</span>
           </label>
           <label class="toggle-item sandbox-only" id="lbl-chk-radar">
             <input type="checkbox" id="chk-radar" checked>
-            <span>⏱️ Bedrohungs-Radar (nur 60s)</span>
+            <span>⏱️ Bedrohungs-Radar (60s)</span>
           </label>
           <label class="toggle-item sandbox-only" id="lbl-chk-blunder">
             <input type="checkbox" id="chk-blunder" checked>
-            <span>⏱️ Patzer-Warnung (nur 60s)</span>
+            <span>⏱️ Patzer-Warnung (60s)</span>
           </label>
+        </div>
+        <div id="heatmap-legend" class="heatmap-legend hidden">
+          <span class="legend-item"><i class="legend-tri mine"></i> Dein Übergewicht (+1/+2)</span>
+          <span class="legend-item"><i class="legend-tri opp"></i> Gegner-Übergewicht (-1/-2)</span>
+          <span class="legend-item">Gleichstand = neutral</span>
         </div>
       </div>
 
       <!-- Partie-Aktionen (Remis / Aufgeben / Beenden) -->
-      <div class="card actions-card">
+      <div id="game-actions-card" class="card actions-card">
         <div id="draw-offer-banner" class="draw-banner hidden">
           <span>Dein Gegner bietet dir ein Remis (Unentschieden) an!</span>
           <button id="btn-accept-draw" class="btn btn-primary btn-small">Remis annehmen</button>
@@ -207,22 +310,21 @@
       <h3>🎮 Steuerung auf dem Brett</h3>
       <ul class="rules-list">
         <li><strong>Figur bewegen (2-Tipp-Steuerung):</strong> Tippe zuerst deine Figur an (grüne Punkte zeigen mögliche Wege) und tippe danach auf das Zielfeld.</li>
-        <li><strong>60s Sandkasten-Modus:</strong> Nach dem Öffnen der Partie läuft ein 60-Sekunden-Timer. Währenddessen kannst du beliebig viele Züge (auch für den Gegner) zur Probe auf dem Brett durchspielen!</li>
-        <li><strong>Stellung zurücksetzen:</strong> Mit <em>„↺ Stellung zurücksetzen“</em> kehrst du jederzeit zur echten Ausgangsstellung zurück.</li>
-        <li><strong>Pfeile malen:</strong> Schalte <em>„↗ Pfeil malen“</em> auf <strong>AN</strong>. Tippe dann erst auf ein Startfeld und danach auf ein Zielfeld, um einen Pfeil zu zeichnen.</li>
+        <li><strong>60s Sandkasten-Modus:</strong> Nach dem Öffnen der Partie läuft ein 60-Sekunden-Timer (wird gespeichert). Währenddessen kannst du beliebig viele Züge zur Probe durchspielen!</li>
+        <li><strong>Zughistorie &amp; Nachspielen:</strong> Über die Leiste <em>„📋 Zughistorie“</em> kannst du frühere Züge der Partie Schritt für Schritt vor- und zurückblättern.</li>
+        <li><strong>Feld-Dominanz (Neue Heatmap):</strong> Zeigt über scharfe Eck-Dreiecke und kleine Zahlen (<code>+1</code>, <code>-2</code>) nur Felder mit echter Überzahl an. Ausgeglichene Felder bleiben ruhig.</li>
         <li><strong>Zug absenden:</strong> Nach Ablauf der 60 Sekunden muss genau <strong>dein 1 geplanter Zug</strong> auf dem Brett stehen – dann wird der grüne Bestätigen-Button aktiv.</li>
       </ul>
 
-      <h3>📖 Familien-Regeln &amp; Spezialzüge</h3>
+      <h3>📖 Familien-Regeln &amp; Botgnus</h3>
       <ul class="rules-list">
-        <li><strong>1 Zug pro Tag:</strong> Jeder Spieler darf pro Partie 1× am Kalendertag ziehen (Reset um 00:00 Uhr). Gegen Computer-Bots antwortet der Bot sofort, du hast aber auch gegen Bots 1 Zug pro Tag.</li>
-        <li><strong>Rochade:</strong> Tippe auf den König und ziehe ihn 2 Felder Richtung Turm – der Turm springt automatisch drüber.</li>
-        <li><strong>En Passant:</strong> Zieht ein gegnerischer Bauer aus der Startreihe 2 Felder vor direkt neben deinen Bauern, kannst du ihn im direkt nächsten Zug schräg dahinter schlagen.</li>
+        <li><strong>1 Zug pro Tag:</strong> Jeder Spieler darf pro Partie 1× am Kalendertag ziehen (Reset um 00:00 Uhr).</li>
+        <li><strong>Botgnus:</strong> Du kannst maximal 1 aktives Spiel gegen Botgnus gleichzeitig führen. Seine Rechentiefe (1 bis 5 Züge im Voraus) stellst du per Schieberegler ein. Ab Stufe 2 nutzt er zudem ein klassisches Eröffnungsrepertoire.</li>
       </ul>
       <button id="btn-close-rules" class="btn btn-primary btn-block">Verstanden</button>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

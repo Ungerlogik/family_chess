@@ -1,6 +1,6 @@
 * {
-box-sizing: border-box;
--webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -49,13 +49,25 @@ h1, h2, h3 {
 }
 
 h1 { font-size: 1.5rem; text-align: center; }
-h2 { font-size: 1.15rem; color: #f39c12; }
-h3 { font-size: 1rem; color: #bdc3c7; }
+h2 { font-size: 1.12rem; color: #f39c12; margin-bottom: 0; }
+h3 { font-size: 0.98rem; color: #bdc3c7; }
+
+.section-header {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+    margin-bottom: 10px;
+}
 
 .subtitle, .hint {
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     color: #95a5a6;
-    margin-bottom: 14px;
+    margin-top: 4px;
+    margin-bottom: 12px;
+    line-height: 1.35;
 }
 
 .subtitle { text-align: center; }
@@ -93,13 +105,14 @@ input[type="text"], input[type="password"] {
 }
 
 .btn:disabled {
-    opacity: 0.45;
+    opacity: 0.42;
     cursor: not-allowed;
 }
 
-.btn-block { width: 100%; padding: 13px; font-size: 1.05rem; }
+.btn-block { width: 100%; padding: 13px; font-size: 1.02rem; }
 .btn-small { padding: 6px 10px; font-size: 0.82rem; }
 .btn-primary { background: #2980b9; }
+.btn-bot { background: #6c5ce7; color: #fff; }
 .btn-confirm { background: #27ae60; margin-bottom: 14px; }
 .btn-secondary { background: #3b4654; }
 .btn-danger { background: #c0392b; }
@@ -119,6 +132,16 @@ input[type="text"], input[type="password"] {
     border-bottom: 1px solid #333e4b;
 }
 
+.game-header-info {
+    font-weight: 600;
+    font-size: 0.92rem;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+}
+
 .badge {
     background: #f39c12;
     color: #161b20;
@@ -127,6 +150,175 @@ input[type="text"], input[type="password"] {
     font-size: 0.8rem;
     font-weight: bold;
     margin-left: 6px;
+}
+
+.count-pill {
+    background: #1a2026;
+    color: #bdc3c7;
+    border: 1px solid #3d4a58;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.bot-pill {
+    background: rgba(108, 92, 231, 0.2);
+    color: #a29bfe;
+    border-color: #6c5ce7;
+}
+
+.bot-pill.locked {
+    background: rgba(230, 126, 34, 0.2);
+    color: #f39c12;
+    border-color: #e67e22;
+}
+
+/* Haupt-Tab-Navigation (Startseite / Highscore / Historie) */
+.main-tabs {
+    display: -webkit-flex;
+    display: flex;
+    background: #192026;
+    border-bottom: 1px solid #333e4b;
+    max-width: 520px;
+    margin: 0 auto;
+}
+
+.tab-btn {
+    -webkit-flex: 1;
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #95a5a6;
+    padding: 12px 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+}
+
+.tab-btn.active {
+    color: #f39c12;
+    border-bottom-color: #f39c12;
+    background: rgba(243, 156, 18, 0.07);
+}
+
+/* Startseite Hero Elo-Karte */
+.hero-card {
+    background: linear-gradient(135deg, #283340 0%, #1f2730 100%);
+    border: 1px solid #3b4b5c;
+}
+
+.hero-main {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+}
+
+.hero-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #95a5a6;
+}
+
+.hero-elo-row {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: baseline;
+    align-items: baseline;
+    margin: 4px 0 6px 0;
+}
+
+.hero-elo {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #f39c12;
+    line-height: 1;
+}
+
+.hero-elo-unit {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #bdc3c7;
+    margin-left: 5px;
+}
+
+.rank-pill {
+    background: #2c3e50;
+    color: #ecf0f1;
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 10px;
+    border: 1px solid #485e74;
+}
+
+.hero-stats {
+    font-size: 0.82rem;
+    color: #bdc3c7;
+}
+
+/* Botgnus Karte & Schieberegler */
+.bot-card {
+    border: 1px solid #483d73;
+    background: linear-gradient(180deg, #28263b 0%, #242a34 100%);
+}
+
+.bot-slider-box {
+    background: #1a1f29;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    border: 1px solid #373c52;
+}
+
+.bot-slider-labels {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+.bot-depth-badge {
+    color: #a29bfe;
+    font-size: 0.85rem;
+}
+
+.bot-slider {
+    width: 100%;
+    margin: 4px 0;
+    cursor: pointer;
+}
+
+.bot-slider-ticks {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    font-size: 0.74rem;
+    color: #7f8c8d;
+    padding: 0 4px;
+}
+
+.bot-lock-notice {
+    background: rgba(230, 126, 34, 0.15);
+    border: 1px solid #e67e22;
+    color: #f5b041;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    margin-bottom: 10px;
+    line-height: 1.35;
 }
 
 /* Listen & Gegner-Auswahl */
@@ -138,7 +330,7 @@ input[type="text"], input[type="password"] {
     -webkit-align-items: center;
     align-items: center;
     background: #1f262e;
-    padding: 10px 12px;
+    padding: 11px 12px;
     border-radius: 8px;
     margin-bottom: 8px;
     border-left: 4px solid #576574;
@@ -147,6 +339,53 @@ input[type="text"], input[type="password"] {
 
 .game-item.my-turn { border-left-color: #2ecc71; background: #213029; }
 .game-item.waiting-tomorrow { border-left-color: #f39c12; }
+
+/* Historie-Einträge */
+.game-item.hist-win  { border-left-color: #2ecc71; }
+.game-item.hist-draw { border-left-color: #f1c40f; }
+.game-item.hist-loss { border-left-color: #e74c3c; }
+.game-item.hist-abort { border-left-color: #7f8c8d; opacity: 0.8; }
+
+.res-badge {
+    display: inline-block;
+    font-size: 0.73rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 6px;
+    text-transform: uppercase;
+}
+.res-win   { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #27ae60; }
+.res-draw  { background: rgba(241, 196, 15, 0.2); color: #f1c40f; border: 1px solid #f39c12; }
+.res-loss  { background: rgba(231, 76, 60, 0.2); color: #ff7675; border: 1px solid #c0392b; }
+.res-abort { background: rgba(127, 140, 141, 0.2); color: #bdc3c7; border: 1px solid #7f8c8d; }
+
+.history-filters {
+    display: -webkit-flex;
+    display: flex;
+    margin-bottom: 12px;
+    gap: 6px;
+}
+
+.hist-filter-btn {
+    -webkit-flex: 1;
+    flex: 1;
+    padding: 7px 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: #1b2229;
+    color: #95a5a6;
+    border: 1px solid #35404d;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 0 2px;
+}
+
+.hist-filter-btn.active {
+    background: #2980b9;
+    color: #fff;
+    border-color: #3498db;
+}
 
 .opponent-grid {
     display: -webkit-flex;
@@ -158,16 +397,11 @@ input[type="text"], input[type="password"] {
 
 .opp-btn {
     margin: 4px;
-    padding: 8px 12px;
+    padding: 9px 12px;
     background: #34495e;
     border-radius: 6px;
     font-size: 0.88rem;
     border: 1px solid #4a627a;
-}
-
-.opp-btn.bot-btn {
-    background: #2c2840;
-    border-color: #6c5ce7;
 }
 
 /* Leaderboard Tabelle */
@@ -175,14 +409,17 @@ input[type="text"], input[type="password"] {
 .leaderboard-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
 }
 .leaderboard-table th, .leaderboard-table td {
-    padding: 8px 6px;
+    padding: 9px 6px;
     text-align: left;
     border-bottom: 1px solid #35404d;
 }
 .leaderboard-table th { color: #95a5a6; }
+.leaderboard-table tr.me-row {
+    background: rgba(243, 156, 18, 0.14);
+}
 
 /* Banner & 60s Fortschrittsbalken */
 .turn-banner {
@@ -190,12 +427,14 @@ input[type="text"], input[type="password"] {
     border-radius: 6px;
     text-align: center;
     font-weight: bold;
+    font-size: 0.9rem;
     margin-bottom: 10px;
     background: #34495e;
 }
 .turn-banner.green { background: #1e8449; }
 .turn-banner.orange { background: #b9770e; }
 .turn-banner.blue { background: #1f618d; }
+.turn-banner.red { background: #922b21; }
 
 .timer-box {
     background: #192026;
@@ -209,7 +448,7 @@ input[type="text"], input[type="password"] {
     display: flex;
     -webkit-justify-content: space-between;
     justify-content: space-between;
-    font-size: 0.85rem;
+    font-size: 0.84rem;
     margin-bottom: 6px;
 }
 .progress-track {
@@ -234,11 +473,17 @@ input[type="text"], input[type="password"] {
     display: flex;
     -webkit-justify-content: space-between;
     justify-content: space-between;
-    font-size: 0.92rem;
+    -webkit-align-items: center;
+    align-items: center;
+    font-size: 0.9rem;
     font-weight: 600;
     padding: 4px 2px;
 }
-.material-info { color: #f1c40f; font-size: 0.88rem; }
+.material-info {
+    color: #f1c40f;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
 
 /* ================= SCHACHBRETT ================= */
 .board-wrapper {
@@ -281,21 +526,29 @@ input[type="text"], input[type="password"] {
 .coord-rank {
     position: absolute;
     top: 2px; left: 3px;
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     font-weight: bold;
     pointer-events: none;
+    z-index: 2;
 }
 .coord-file {
     position: absolute;
     bottom: 1px; right: 3px;
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     font-weight: bold;
     pointer-events: none;
+    z-index: 2;
 }
 
 /* Markierungen & Lernhilfen auf dem Brett */
 .sq-selected { background-color: #7b9f35 !important; }
 .sq-last-move { background-color: rgba(241, 196, 15, 0.52) !important; }
+
+/* König steht im Schach! */
+.sq-in-check {
+    background: radial-gradient(circle, rgba(231, 76, 60, 0.95) 20%, rgba(192, 57, 43, 0.75) 75%, transparent 100%) !important;
+    box-shadow: inset 0 0 0 3px #c0392b !important;
+}
 
 /* Bedrohungs-Radar (Hängende / Angegriffene eigene Figuren) */
 .sq-hanging {
@@ -306,10 +559,91 @@ input[type="text"], input[type="password"] {
     box-shadow: inset 0 0 0 3px #e67e22 !important;
 }
 
-/* Heatmap (Raumkontrolle) */
-.sq-heat-mine { box-shadow: inset 0 0 12px rgba(41, 128, 185, 0.65); }
-.sq-heat-opp  { box-shadow: inset 0 0 12px rgba(192, 57, 43, 0.65); }
-.sq-heat-both { box-shadow: inset 0 0 12px rgba(142, 68, 173, 0.65); }
+/* ================= NEUE KOMBI-HEATMAP (SCHARFE ECK-DREIECKE + MINI-BILANZ) ================= */
+.heat-corner {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* Eigene Überzahl (+1 dezent, ab +2 kräftiger) */
+.heat-corner.mine-1 {
+    border-width: 0 18px 18px 0;
+    border-color: transparent rgba(41, 128, 185, 0.82) transparent transparent;
+}
+.heat-corner.mine-2 {
+    border-width: 0 22px 22px 0;
+    border-color: transparent rgba(26, 188, 156, 0.95) transparent transparent;
+}
+
+/* Gegnerische Überzahl (-1 dezent, ab -2 kräftiger) */
+.heat-corner.opp-1 {
+    border-width: 0 18px 18px 0;
+    border-color: transparent rgba(211, 84, 0, 0.82) transparent transparent;
+}
+.heat-corner.opp-2 {
+    border-width: 0 22px 22px 0;
+    border-color: transparent rgba(192, 57, 43, 0.95) transparent transparent;
+}
+
+.heat-val {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    font-size: 0.52rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    z-index: 4;
+}
+
+/* Dezenter unterer Rand-Balken bei starker Dominanz (>= +2 oder <= -2) */
+.sq-dom-strong-mine {
+    border-bottom: 3px solid rgba(26, 188, 156, 0.85);
+}
+.sq-dom-strong-opp {
+    border-bottom: 3px solid rgba(192, 57, 43, 0.85);
+}
+
+/* Legende unter den Lernhilfen */
+.heatmap-legend {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+    background: #1b2229;
+    padding: 7px 10px;
+    border-radius: 6px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: #bdc3c7;
+}
+.legend-item {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    margin-right: 6px;
+}
+.legend-tri {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 10px 10px 0;
+    margin-right: 5px;
+}
+.legend-tri.mine { border-color: transparent #1abc9c transparent transparent; }
+.legend-tri.opp  { border-color: transparent #e74c3c transparent transparent; }
 
 /* Mögliche Züge (Grüner Punkt / Roter Schlag-Ring) */
 .legal-dot {
@@ -317,7 +651,7 @@ input[type="text"], input[type="password"] {
     width: 28%;
     height: 28%;
     border-radius: 50%;
-    background: rgba(39, 174, 96, 0.75);
+    background: rgba(39, 174, 96, 0.78);
     pointer-events: none;
     z-index: 3;
 }
@@ -326,7 +660,7 @@ input[type="text"], input[type="password"] {
     width: 86%;
     height: 86%;
     border-radius: 50%;
-    border: 4px solid rgba(231, 76, 60, 0.8);
+    border: 4px solid rgba(231, 76, 60, 0.82);
     pointer-events: none;
     z-index: 3;
 }
@@ -358,9 +692,9 @@ input[type="text"], input[type="password"] {
 .control-row .btn {
     -webkit-flex: 1;
     flex: 1;
-    margin: 0 3px;
-    font-size: 0.82rem;
-    padding: 9px 6px;
+    margin: 0 2px;
+    font-size: 0.78rem;
+    padding: 9px 4px;
 }
 
 .warning-banner {
@@ -370,7 +704,7 @@ input[type="text"], input[type="password"] {
     padding: 9px 12px;
     border-radius: 6px;
     margin-bottom: 10px;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     font-weight: 600;
 }
 
@@ -386,7 +720,7 @@ input[type="text"], input[type="password"] {
     display: flex;
     -webkit-align-items: center;
     align-items: center;
-    font-size: 0.84rem;
+    font-size: 0.82rem;
     margin-bottom: 8px;
     cursor: pointer;
 }
@@ -434,6 +768,8 @@ input[type="text"], input[type="password"] {
     border-radius: 10px;
     max-width: 400px;
     width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
 }
 .promo-buttons {
     display: -webkit-flex;
@@ -442,5 +778,42 @@ input[type="text"], input[type="password"] {
     flex-wrap: wrap;
 }
 .promo-btn { width: 46%; margin: 2%; font-size: 1.1rem; }
-.rules-list { padding-left: 18px; font-size: 0.88rem; line-height: 1.45; }
+.rules-list { padding-left: 18px; font-size: 0.86rem; line-height: 1.45; }
 .rules-list li { margin-bottom: 8px; }
+
+/* Kompakte Zughistorie & Replay-Leiste */
+.history-replay-card {
+    padding: 10px 12px;
+}
+.move-list-strip {
+    background: #192026;
+    border: 1px solid #35404d;
+    border-radius: 6px;
+    padding: 7px 9px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    max-height: 68px;
+    overflow-y: auto;
+    color: #bdc3c7;
+}
+.move-num {
+    color: #7f8c8d;
+    margin-right: 2px;
+}
+.move-chip {
+    display: inline-block;
+    padding: 1px 5px;
+    margin-right: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #ecf0f1;
+}
+.move-chip.active-ply {
+    background: #f39c12;
+    color: #161b20;
+    font-weight: 700;
+}
+.replay-controls {
+    margin-bottom: 0;
+}

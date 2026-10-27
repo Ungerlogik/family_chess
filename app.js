@@ -6,9 +6,9 @@
 var SUPABASE_URL = 'https://tkxwgshnsxvvrwghmois.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRreHdnc2huc3h2dnJ3Z2htb2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNzg5MDcsImV4cCI6MjEwNzc1NDkwN30.DyNlKFtStR0sOPsYjJHxZPRL11YoqReMv2QMMKTNJ04';
 
-// Klassischer Elo K-Faktor (bei Bedarf hier anpassbar, wird in DB genutzt)
 var ELO_K_FACTOR = 20;
 var SANDBOX_WAIT_SECONDS = 60;
+var BOT_DISPLAY_NAME = 'Botgnus';
 
 // App-Status
 var state = {
@@ -29,7 +29,12 @@ var state = {
     sandboxTimerId: null,
     arrowMode: false,
     arrowStartSq: null,
-    arrows: []            // [{from: 'e2', to: 'e4'}]
+    arrows: [],           // [{from: 'e2', to: 'e4'}]
+    botDepth: 2,          // 1 bis 5 Halbzüge im Voraus
+    activeTab: 'tab-home',
+    historyFilter: 'all', // 'all', 'win', 'draw', 'loss'
+    gamePlies: [],        // Gespeicherte Halbzüge der Partie für Zughistorie/Replay
+    replayIndex: 0        // Aktuell angezeigter Halbzug-Index im Replay
 };
 
 // Hochwertige, gestochen scharfe Inline-SVG-Schachfiguren
@@ -41,16 +46,114 @@ var PIECE_SVGS = {
     wq: '<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#111" stroke-width="2"><path d="M 9,26 C 17.5,24.5 30,24.5 36,26 L 38.5,13.5 L 31,25 L 30.7,10.9 L 25.5,24.5 L 22.5,10 L 19.5,24.5 L 14.3,10.9 L 14,25 L 6.5,13.5 L 9,26 z"/><path d="M 9,26 C 9,28 10.5,28 11.5,30 C 12.5,31.5 12.5,31 12,33.5 C 10.5,34.5 11,36 11,36 C 9.5,37.5 11,38.5 11,38.5 C 17.5,39.5 27.5,39.5 34,38.5 C 34,38.5 35.5,37.5 34,36 C 34,36 34.5,34.5 33,33.5 C 32.5,31 32.5,31.5 33.5,30 C 34.5,28 36,28 36,26 C 27.5,24.5 17.5,24.5 9,26 z"/></g></svg>',
     wk: '<svg viewBox="0 0 45 45" class="piece-svg"><g fill="#ffffff" stroke="#111" stroke-width="2"><path d="M 22.5,11.63 L 22.5,6"/><path d="M 20,8 L 25,8"/><path d="M 22.5,25 C 22.5,25 27,17.5 25.5,14.5 C 25.5,14.5 24.5,12 22.5,12 C 20.5,12 19.5,14.5 19.5,14.5 C 18,17.5 22.5,25 22.5,25"/><path d="M 11.5,37 C 17,40.5 27,40.5 32.5,37 L 32.5,30 C 32.5,30 41.5,25.5 38.5,19.5 C 34.5,13 25,16 22.5,23.5 L 22.5,27 L 22.5,23.5 C 19,16 9.5,13 6.5,19.5 C 3.5,25.5 11.5,29.5 11.5,29.5 L 11.5,37 z"/></g></svg>'
 };
-// Schwarze Figuren automatisch aus den weißen generieren
 var pKeys = ['p', 'r', 'n', 'b', 'q', 'k'];
 for (var i = 0; i < pKeys.length; i++) {
     var k = pKeys[i];
     PIECE_SVGS['b' + k] = PIECE_SVGS['w' + k]
-    .replace('fill="#ffffff"', 'fill="#262b30"')
-    .replace('stroke="#111"', 'stroke="#f5f6fa"');
+        .replace('fill="#ffffff"', 'fill="#262b30"')
+        .replace('stroke="#111"', 'stroke="#f5f6fa"');
 }
 
 var PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+var CAPTURE_SYMBOLS = { q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+
+// Kompaktes Eröffnungsbuch für Botgnus (anhand der Figurenstellung im FEN -> passende Klassiker-Züge)
+var OPENING_BOOK = {
+    // 1. Zug Weiß (Startstellung)
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR': ['e2e4', 'd2d4', 'g1f3', 'c2c4'],
+    // 1. Zug Schwarz nach 1. e4 (Offene Spiele, Sizilianisch, Französisch, Caro-Kann)
+    'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR': ['e7e5', 'c7c5', 'e7e6', 'c7c6'],
+    // 1. Zug Schwarz nach 1. d4 (Damengambit, Indisch)
+    'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR': ['d7d5', 'g8f6', 'e7e6'],
+    // 1. Zug Schwarz nach 1. Sf3 / 1. c4
+    'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R': ['d7d5', 'g8f6', 'c7c5'],
+    'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR': ['e7e5', 'g8f6', 'c7c5'],
+    // 2. Zug Weiß nach 1. e4 e5
+    'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR': ['g1f3', 'b1c3', 'f1c4'],
+    // 2. Zug Weiß nach 1. e4 c5 (Sizilianisch)
+    'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR': ['g1f3', 'b1c3', 'c2c3'],
+    // 2. Zug Weiß nach 1. e4 e6 (Französisch) & 1. e4 c6 (Caro-Kann)
+    'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR': ['d2d4', 'b1c3', 'g1f3'],
+    'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR': ['d2d4', 'b1c3', 'g1f3'],
+    // 2. Zug Weiß nach 1. d4 d5 & 1. d4 Sf6
+    'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR': ['c2c4', 'g1f3', 'c1f4'],
+    'rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR': ['c2c4', 'g1f3', 'c1f4'],
+    // 2. Zug Schwarz nach 1. e4 e5 2. Sf3
+    'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R': ['b8c6', 'g8f6'],
+    // 2. Zug Schwarz nach 1. e4 c5 2. Sf3
+    'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R': ['d7d6', 'b8c6', 'e7e6'],
+    // 2. Zug Schwarz nach 1. d4 d5 2. c4 (Damengambit angenommen/abgelehnt/Slawisch)
+    'rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR': ['e7e6', 'c7c6', 'd5c4'],
+    // 3. Zug Weiß nach 1. e4 e5 2. Sf3 Sc6 (Italienisch, Spanisch, Schottisch)
+    'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R': ['f1c4', 'f1b5', 'd2d4', 'b1c3'],
+    // 3. Zug Schwarz nach Italienisch (3. Lc4) & Spanisch (3. Lb5)
+    'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R': ['f8c5', 'g8f6'],
+    'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R': ['a7a6', 'g8f6']
+};
+
+// Kompakte Positionstabellen (Piece-Square-Tables aus Sicht von Weiß, Zeile 0 = Reihe 8 bis Zeile 7 = Reihe 1)
+var PST = {
+    p: [
+        [ 0,  0,  0,  0,  0,  0,  0,  0],
+        [ 5,  5,  5,  5,  5,  5,  5,  5],
+        [ 1,  1,  2,  3,  3,  2,  1,  1],
+        [ 0,  0,  1,  2.5,2.5,1,  0,  0],
+        [ 0,  0,  0,  2,  2,  0,  0,  0],
+        [ 0.5,-0.5,-1, 0,  0, -1, -0.5,0.5],
+        [ 0.5, 1,  1, -2, -2,  1,  1,  0.5],
+        [ 0,  0,  0,  0,  0,  0,  0,  0]
+    ],
+    n: [
+        [-5, -4, -3, -3, -3, -3, -4, -5],
+        [-4, -2,  0,  0,  0,  0, -2, -4],
+        [-3,  0,  1,  1.5,1.5, 1,  0, -3],
+        [-3,  0.5,1.5, 2,  2,  1.5,0.5,-3],
+        [-3,  0,  1.5, 2,  2,  1.5, 0, -3],
+        [-3,  0.5, 1,  1.5,1.5, 1, 0.5,-3],
+        [-4, -2,  0,  0.5,0.5, 0, -2, -4],
+        [-5, -4, -3, -3, -3, -3, -4, -5]
+    ],
+    b: [
+        [-2, -1, -1, -1, -1, -1, -1, -2],
+        [-1,  0,  0,  0,  0,  0,  0, -1],
+        [-1,  0,  0.5, 1,  1,  0.5, 0, -1],
+        [-1,  0.5,0.5, 1,  1,  0.5,0.5,-1],
+        [-1,  0,  1,   1,  1,  1,   0, -1],
+        [-1,  1,  1,   1,  1,  1,   1, -1],
+        [-1,  0.5, 0,  0,  0,  0,  0.5,-1],
+        [-2, -1, -1, -1, -1, -1, -1, -2]
+    ],
+    r: [
+        [ 0,  0,  0,  0,  0,  0,  0,  0],
+        [ 0.5, 1,  1,  1,  1,  1,  1, 0.5],
+        [-0.5, 0,  0,  0,  0,  0,  0, -0.5],
+        [-0.5, 0,  0,  0,  0,  0,  0, -0.5],
+        [-0.5, 0,  0,  0,  0,  0,  0, -0.5],
+        [-0.5, 0,  0,  0,  0,  0,  0, -0.5],
+        [-0.5, 0,  0,  0,  0,  0,  0, -0.5],
+        [ 0,  0,  0,  0.5,0.5, 0,  0,  0]
+    ],
+    q: [
+        [-2, -1, -1, -0.5,-0.5,-1, -1, -2],
+        [-1,  0,  0,  0,   0,   0,  0, -1],
+        [-1,  0,  0.5,0.5, 0.5, 0.5,0, -1],
+        [-0.5,0,  0.5,0.5, 0.5, 0.5,0, -0.5],
+        [ 0,  0,  0.5,0.5, 0.5, 0.5,0, -0.5],
+        [-1,  0.5,0.5,0.5, 0.5, 0.5,0, -1],
+        [-1,  0,  0.5, 0,   0,  0,  0, -1],
+        [-2, -1, -1, -0.5,-0.5,-1, -1, -2]
+    ],
+    k: [
+        [-3, -4, -4, -5, -5, -4, -4, -3],
+        [-3, -4, -4, -5, -5, -4, -4, -3],
+        [-3, -4, -4, -5, -5, -4, -4, -3],
+        [-3, -4, -4, -5, -5, -4, -4, -3],
+        [-2, -3, -3, -4, -4, -3, -3, -2],
+        [-1, -2, -2, -2, -2, -2, -2, -1],
+        [ 2,  2,  0,  0,  0,  0,  2,  2],
+        [ 2,  3,  1,  0,  0,  1,  3,  2]
+    ]
+};
 
 /* ============================================================================
  * 2. KOMPATIBLE SUPABASE REST-API FUNKTION (XMLHttpRequest für iOS 10)
@@ -87,6 +190,15 @@ function callRpc(fnName, params, callback) {
 function initApp() {
     var savedName = localStorage.getItem('fc_name') || '';
     var savedPw = localStorage.getItem('fc_pw') || '';
+    var savedDepth = parseInt(localStorage.getItem('fc_bot_depth') || '2', 10);
+    if (isNaN(savedDepth) || savedDepth < 1 || savedDepth > 5) savedDepth = 2;
+
+    state.botDepth = savedDepth;
+    var slider = document.getElementById('inp-bot-depth');
+    if (slider) {
+        slider.value = String(savedDepth);
+        updateBotSliderLabel();
+    }
 
     document.getElementById('inp-name').value = savedName;
     document.getElementById('inp-pw').value = savedPw;
@@ -94,6 +206,19 @@ function initApp() {
     if (savedName && savedPw) {
         attemptLogin(savedName, savedPw);
     }
+}
+
+function updateBotSliderLabel() {
+    var d = state.botDepth;
+    var labels = {
+        1: '1 Zug im Voraus (Einsteiger)',
+        2: '2 Züge im Voraus (Leicht + Buch)',
+        3: '3 Züge im Voraus (Mittel + Buch)',
+        4: '4 Züge im Voraus (Stark + Buch)',
+        5: '5 Züge im Voraus (Meister + Buch)'
+    };
+    var el = document.getElementById('lbl-bot-depth-info');
+    if (el) el.textContent = labels[d] || (d + ' Züge im Voraus');
 }
 
 function attemptLogin(name, pw) {
@@ -151,114 +276,308 @@ function showView(viewId) {
     }
 }
 
+function switchLobbyTab(tabId) {
+    state.activeTab = tabId;
+    var panes = ['tab-home', 'tab-highscore', 'tab-history'];
+    for (var i = 0; i < panes.length; i++) {
+        var paneEl = document.getElementById(panes[i]);
+        if (panes[i] === tabId) paneEl.classList.remove('hidden');
+        else paneEl.classList.add('hidden');
+    }
+
+    var btns = document.querySelectorAll('.tab-btn');
+    for (var j = 0; j < btns.length; j++) {
+        if (btns[j].getAttribute('data-tab') === tabId) {
+            btns[j].classList.add('active');
+        } else {
+            btns[j].classList.remove('active');
+        }
+    }
+}
+
 /* ============================================================================
- * 4. LOBBY & LEADERBOARD RENDERN
+ * 4. BOTGNUS HELFER & STARTSEITE / HIGHSCORE / HISTORIE RENDERN
  * ============================================================================ */
+function isBotPlayer(name) {
+    if (!name) return false;
+    if (name === BOT_DISPLAY_NAME || name.toLowerCase().indexOf('bot') !== -1) return true;
+    var p = findPlayer(name);
+    return !!(p && p.is_bot);
+}
+
+function resolveBotDbName() {
+    var exact = findPlayer(BOT_DISPLAY_NAME);
+    if (exact) return exact.name;
+    for (var i = 0; i < state.players.length; i++) {
+        if (state.players[i].is_bot) return state.players[i].name;
+    }
+    return BOT_DISPLAY_NAME;
+}
+
+function formatDisplayName(name) {
+    if (isBotPlayer(name)) return BOT_DISPLAY_NAME;
+    return name || '';
+}
+
+function hasActiveBotGame() {
+    for (var i = 0; i < state.games.length; i++) {
+        var g = state.games[i];
+        if (g.status !== 'active') continue;
+        var isParticipant = (g.white_player === state.userName || g.black_player === state.userName);
+        if (!isParticipant) continue;
+        var opp = (g.white_player === state.userName) ? g.black_player : g.white_player;
+        if (isBotPlayer(opp)) return true;
+    }
+    return false;
+}
+
 function renderLobby() {
     document.getElementById('lbl-user-name').textContent = state.userName;
     var me = findPlayer(state.userName);
-    if (me) {
-        document.getElementById('lbl-user-elo').textContent = me.elo + ' Elo';
+
+    var humanPlayers = [];
+    for (var pIdx = 0; pIdx < state.players.length; pIdx++) {
+        if (!state.players[pIdx].is_bot && state.players[pIdx].name !== BOT_DISPLAY_NAME) {
+            humanPlayers.push(state.players[pIdx]);
+        }
+    }
+    humanPlayers.sort(function (a, b) { return (b.elo || 0) - (a.elo || 0); });
+
+    var myRank = '-';
+    for (var rIdx = 0; rIdx < humanPlayers.length; rIdx++) {
+        if (humanPlayers[rIdx].name === state.userName) {
+            myRank = (rIdx + 1) + ' von ' + humanPlayers.length;
+            break;
+        }
     }
 
-    // 1. Offene & Beendete Partien trennen
-    var activeContainer = document.getElementById('list-active-games');
-    var finishedContainer = document.getElementById('list-finished-games');
-    activeContainer.innerHTML = '';
-    finishedContainer.innerHTML = '';
+    if (me) {
+        document.getElementById('lbl-user-elo').textContent = me.elo + ' Elo';
+        document.getElementById('hero-elo-value').textContent = me.elo;
+        document.getElementById('hero-rank-badge').textContent = 'Platz ' + myRank;
+        document.getElementById('hero-stats-line').textContent =
+            (me.wins || 0) + ' Siege · ' + (me.draws || 0) + ' Remis · ' + (me.losses || 0) + ' Niederlagen';
+    }
 
-    var activeCount = 0;
-    var finishedCount = 0;
+    var activeContainer = document.getElementById('list-active-games');
+    activeContainer.innerHTML = '';
+
+    var myActiveGames = [];
+    var myFinishedGames = [];
 
     for (var i = 0; i < state.games.length; i++) {
         var g = state.games[i];
         var isParticipant = (g.white_player === state.userName || g.black_player === state.userName);
+        if (!isParticipant) continue;
 
-        if (g.status === 'active' && isParticipant) {
-            activeCount++;
-            activeContainer.appendChild(createGameRow(g, true));
-        } else if (g.status !== 'active') {
-            finishedCount++;
-            if (finishedCount <= 10) {
-                finishedContainer.appendChild(createGameRow(g, false));
-            }
+        if (g.status === 'active') {
+            myActiveGames.push(g);
+        } else {
+            myFinishedGames.push(g);
         }
     }
 
-    if (activeCount === 0) {
-        activeContainer.innerHTML = '<p class="hint">Keine offenen Partien. Starte unten ein neues Spiel!</p>';
-    }
-    if (finishedCount === 0) {
-        finishedContainer.innerHTML = '<p class="hint">Noch keine abgeschlossenen Partien.</p>';
+    myActiveGames.sort(function (a, b) {
+        return getGamePriority(a) - getGamePriority(b);
+    });
+
+    document.getElementById('badge-active-count').textContent = myActiveGames.length + ' aktiv';
+
+    if (myActiveGames.length === 0) {
+        activeContainer.innerHTML = '<p class="hint">Keine offenen Partien. Starte unten ein Spiel gegen Botgnus oder die Familie!</p>';
+    } else {
+        for (var a = 0; a < myActiveGames.length; a++) {
+            activeContainer.appendChild(createActiveGameRow(myActiveGames[a]));
+        }
     }
 
-    // 2. Gegner-Buttons
+    var botRunning = hasActiveBotGame();
+    var btnStartBot = document.getElementById('btn-start-bot');
+    var botHint = document.getElementById('bot-active-hint');
+    var botPill = document.getElementById('bot-status-pill');
+
+    if (botRunning) {
+        btnStartBot.disabled = true;
+        btnStartBot.textContent = '🔒 Bereits 1 Spiel gegen Botgnus aktiv';
+        botHint.classList.remove('hidden');
+        botPill.textContent = '1/1 Aktiv';
+        botPill.classList.add('locked');
+    } else {
+        btnStartBot.disabled = false;
+        btnStartBot.textContent = '🤖 Spiel gegen Botgnus starten';
+        botHint.classList.add('hidden');
+        botPill.textContent = 'Bereit';
+        botPill.classList.remove('locked');
+    }
+
     var oppGrid = document.getElementById('list-opponents');
     oppGrid.innerHTML = '';
-    for (var j = 0; j < state.players.length; j++) {
-        var p = state.players[j];
-        if (p.name === state.userName) continue;
+    var humanCount = 0;
+    for (var j = 0; j < humanPlayers.length; j++) {
+        var hp = humanPlayers[j];
+        if (hp.name === state.userName) continue;
+        humanCount++;
 
         var btn = document.createElement('button');
-        btn.className = 'btn opp-btn' + (p.is_bot ? ' bot-btn' : '');
-        btn.textContent = (p.is_bot ? '🤖 ' : '👤 ') + p.name + ' (' + p.elo + ')';
-        btn.setAttribute('data-opp', p.name);
+        btn.className = 'btn opp-btn';
+        btn.textContent = '👤 ' + hp.name + ' (' + hp.elo + ')';
+        btn.setAttribute('data-opp', hp.name);
         btn.onclick = function () {
             startNewGame(this.getAttribute('data-opp'));
         };
         oppGrid.appendChild(btn);
     }
+    if (humanCount === 0) {
+        oppGrid.innerHTML = '<p class="hint">Noch keine weiteren Familienmitglieder angemeldet.</p>';
+    }
 
-    // 3. Leaderboard (OHNE Bots!)
     var tbody = document.getElementById('tbody-leaderboard');
     tbody.innerHTML = '';
-    var rank = 1;
-    for (var k = 0; k < state.players.length; k++) {
-        var pl = state.players[k];
-        if (pl.is_bot) continue; // Bots hier im Leaderboard überspringen!
+    for (var k = 0; k < humanPlayers.length; k++) {
+        var pl = humanPlayers[k];
+        var total = (pl.wins || 0) + (pl.draws || 0) + (pl.losses || 0);
+        var winRate = total > 0 ? Math.round(((pl.wins || 0) / total) * 100) + '%' : '–';
 
         var tr = document.createElement('tr');
+        if (pl.name === state.userName) tr.className = 'me-row';
         tr.innerHTML =
-        '<td>' + (rank++) + '.</td>' +
-        '<td><strong>' + escapeHtml(pl.name) + '</strong></td>' +
-        '<td><strong>' + pl.elo + '</strong></td>' +
-        '<td>' + pl.wins + '</td>' +
-        '<td>' + pl.draws + '</td>' +
-        '<td>' + pl.losses + '</td>';
+            '<td>' + (k + 1) + '.</td>' +
+            '<td><strong>' + escapeHtml(pl.name) + '</strong></td>' +
+            '<td><strong>' + pl.elo + '</strong></td>' +
+            '<td>' + (pl.wins || 0) + '</td>' +
+            '<td>' + (pl.draws || 0) + '</td>' +
+            '<td>' + (pl.losses || 0) + '</td>' +
+            '<td>' + winRate + '</td>';
         tbody.appendChild(tr);
     }
+
+    renderHistoryList(myFinishedGames);
 }
 
-function createGameRow(g, isActive) {
+function getGamePriority(g) {
+    var mySide = (g.white_player === state.userName) ? 'w' : 'b';
+    var isMyTurn = (g.turn === mySide);
+    var myLastDate = (mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
+    var movedToday = (myLastDate === state.serverToday);
+
+    if (isMyTurn && !movedToday) return 1;
+    if (!isMyTurn) return 2;
+    return 3;
+}
+
+function createActiveGameRow(g) {
     var div = document.createElement('div');
     var mySide = (g.white_player === state.userName) ? 'w' : 'b';
-    var oppName = (mySide === 'w') ? g.black_player : g.white_player;
+    var rawOppName = (mySide === 'w') ? g.black_player : g.white_player;
+    var oppDisplay = formatDisplayName(rawOppName);
+    var isBotOpp = isBotPlayer(rawOppName);
+
+    var isMyTurn = (g.turn === mySide);
+    var myLastDate = (mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
+    var movedToday = (myLastDate === state.serverToday);
+
     var statusLabel = '';
     var extraClass = '';
 
-    if (isActive) {
-        var isMyTurn = (g.turn === mySide);
-        var myLastDate = (mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
-        var movedToday = (myLastDate === state.serverToday);
-
-        if (isMyTurn && !movedToday) {
-            statusLabel = '🟢 Du bist am Zug!';
-            extraClass = ' my-turn';
-        } else if (isMyTurn && movedToday) {
-            statusLabel = '⏳ Heute schon gezogen (ab 00:00 Uhr)';
-            extraClass = ' waiting-tomorrow';
-        } else {
-            statusLabel = '⚪ Warte auf ' + oppName;
-        }
+    if (isMyTurn && !movedToday) {
+        statusLabel = '🟢 Du bist am Zug!';
+        extraClass = ' my-turn';
+    } else if (isMyTurn && movedToday) {
+        statusLabel = '⏳ Heute schon gezogen (nächster Zug ab 00:00 Uhr)';
+        extraClass = ' waiting-tomorrow';
     } else {
-        statusLabel = g.result_reason || g.status;
+        statusLabel = '⚪ Warte auf ' + oppDisplay;
     }
+
+    var myColorBadge = (mySide === 'w') ? '♔ Weiß' : '♚ Schwarz';
+    var oppIcon = isBotOpp ? '🤖 ' : '👤 ';
 
     div.className = 'game-item' + extraClass;
     div.innerHTML =
-    '<div><strong>' + escapeHtml(g.white_player) + ' (W)</strong> vs. <strong>' + escapeHtml(g.black_player) + ' (S)</strong><br>' +
-    '<small>' + escapeHtml(statusLabel) + '</small></div>' +
-    '<span>→</span>';
+        '<div>' +
+        '<strong>' + oppIcon + escapeHtml(oppDisplay) + '</strong> <small>(' + myColorBadge + ' · Zug ' + (g.move_count || 1) + ')</small><br>' +
+        '<small>' + escapeHtml(statusLabel) + '</small>' +
+        '</div>' +
+        '<span>Spielen →</span>';
+
+    div.onclick = function () {
+        openGame(g.id);
+    };
+    return div;
+}
+
+function getPersonalOutcome(g) {
+    var mySide = (g.white_player === state.userName) ? 'w' : 'b';
+    if (g.status === 'aborted') return 'abort';
+    if (g.status === 'draw') return 'draw';
+    if (g.status === 'white_won') return (mySide === 'w') ? 'win' : 'loss';
+    if (g.status === 'black_won') return (mySide === 'b') ? 'win' : 'loss';
+    return 'draw';
+}
+
+function renderHistoryList(myFinishedGames) {
+    var finishedContainer = document.getElementById('list-finished-games');
+    finishedContainer.innerHTML = '';
+
+    document.getElementById('badge-history-count').textContent = myFinishedGames.length + ' Partien';
+
+    var filtered = [];
+    for (var i = 0; i < myFinishedGames.length; i++) {
+        var g = myFinishedGames[i];
+        var outcome = getPersonalOutcome(g);
+        if (state.historyFilter === 'all' || state.historyFilter === outcome) {
+            filtered.push(g);
+        }
+    }
+
+    if (filtered.length === 0) {
+        finishedContainer.innerHTML = '<p class="hint">Keine abgeschlossenen Partien für diesen Filter gefunden.</p>';
+        return;
+    }
+
+    for (var j = 0; j < filtered.length; j++) {
+        finishedContainer.appendChild(createHistoryGameRow(filtered[j]));
+    }
+}
+
+function createHistoryGameRow(g) {
+    var div = document.createElement('div');
+    var mySide = (g.white_player === state.userName) ? 'w' : 'b';
+    var rawOpp = (mySide === 'w') ? g.black_player : g.white_player;
+    var oppDisplay = formatDisplayName(rawOpp);
+    var outcome = getPersonalOutcome(g);
+
+    var badgeText = 'Remis';
+    var badgeClass = 'res-draw';
+    var itemClass = 'hist-draw';
+
+    if (outcome === 'win') {
+        badgeText = '🏆 Sieg';
+        badgeClass = 'res-win';
+        itemClass = 'hist-win';
+    } else if (outcome === 'loss') {
+        badgeText = '❌ Niederlage';
+        badgeClass = 'res-loss';
+        itemClass = 'hist-loss';
+    } else if (outcome === 'abort') {
+        badgeText = '✕ Abbruch';
+        badgeClass = 'res-abort';
+        itemClass = 'hist-abort';
+    } else {
+        badgeText = '🤝 Remis';
+    }
+
+    var myColorLabel = (mySide === 'w') ? 'Weiß' : 'Schwarz';
+    var reason = g.result_reason || g.status;
+
+    div.className = 'game-item ' + itemClass;
+    div.innerHTML =
+        '<div>' +
+        '<span class="res-badge ' + badgeClass + '">' + badgeText + '</span>' +
+        '<strong>vs. ' + escapeHtml(oppDisplay) + '</strong> <small>(' + myColorLabel + ')</small><br>' +
+        '<small>' + escapeHtml(reason) + ' · ' + (g.move_count || 0) + ' Halbzüge</small>' +
+        '</div>' +
+        '<span>Analyse →</span>';
 
     div.onclick = function () {
         openGame(g.id);
@@ -267,6 +586,11 @@ function createGameRow(g, isActive) {
 }
 
 function startNewGame(opponentName) {
+    if (isBotPlayer(opponentName) && hasActiveBotGame()) {
+        alert('Du hast bereits ein aktives Spiel gegen Botgnus. Es kann maximal ein Bot-Spiel gleichzeitig laufen.');
+        return;
+    }
+
     callRpc('rpc_start_game', {
         pw: state.password,
         p_creator: state.userName,
@@ -283,8 +607,104 @@ function startNewGame(opponentName) {
 }
 
 /* ============================================================================
- * 5. SPIELBRETT ÖFFNEN & 60-SEKUNDEN SANDKASTEN-TIMER
+ * 5. SPIELBRETT ÖFFNEN, ZUGHISTORIE AUFBAUEN & 60S SANDKASTEN-TIMER
  * ============================================================================ */
+function buildGameMoveHistory(game) {
+    var plies = [];
+    var rawHistory = (game.move_history || '').trim();
+
+    if (rawHistory) {
+        var replayChess = new Chess();
+        plies.push({ fen: replayChess.fen(), san: 'Start', uci: '' });
+        var tokens = rawHistory.split(/\s+/);
+        for (var i = 0; i < tokens.length; i++) {
+            var uci = tokens[i];
+            if (uci.length >= 4) {
+                var mv = replayChess.move({
+                    from: uci.substring(0, 2),
+                    to: uci.substring(2, 4),
+                    promotion: uci.length > 4 ? uci.charAt(4) : 'q'
+                });
+                if (mv) {
+                    plies.push({ fen: replayChess.fen(), san: mv.san, uci: uci });
+                }
+            }
+        }
+    }
+
+    // Fallback, falls für ältere Spiele noch keine move_history in der DB vorlag
+    if (plies.length === 0) {
+        plies.push({ fen: game.fen, san: 'Aktuell', uci: game.last_move_uci || '' });
+    }
+
+    state.gamePlies = plies;
+    state.replayIndex = plies.length - 1;
+    renderMoveHistoryStrip();
+}
+
+function renderMoveHistoryStrip() {
+    var strip = document.getElementById('move-list-strip');
+    var stepLbl = document.getElementById('lbl-replay-step');
+    var plies = state.gamePlies;
+
+    if (!plies || plies.length <= 1) {
+        strip.textContent = 'Noch keine Züge im Verlauf gespeichert.';
+        stepLbl.textContent = 'Aktuell';
+        updateReplayButtons();
+        return;
+    }
+
+    var html = '';
+    for (var i = 1; i < plies.length; i++) {
+        if (i % 2 === 1) {
+            var moveNo = Math.floor((i + 1) / 2);
+            html += '<span class="move-num">' + moveNo + '.</span>';
+        }
+        var activeCls = (i === state.replayIndex) ? ' active-ply' : '';
+        html += '<span class="move-chip' + activeCls + '" data-ply="' + i + '">' + escapeHtml(plies[i].san) + '</span>';
+    }
+
+    strip.innerHTML = html;
+    if (state.replayIndex === plies.length - 1) {
+        stepLbl.textContent = 'Aktuell (Zug ' + (plies.length - 1) + ')';
+    } else {
+        stepLbl.textContent = 'Rückblick: ' + state.replayIndex + ' / ' + (plies.length - 1);
+    }
+
+    var chips = strip.querySelectorAll('.move-chip');
+    for (var c = 0; c < chips.length; c++) {
+        chips[c].onclick = function () {
+            jumpToReplayPly(parseInt(this.getAttribute('data-ply'), 10));
+        };
+    }
+
+    updateReplayButtons();
+}
+
+function updateReplayButtons() {
+    var total = state.gamePlies.length;
+    var idx = state.replayIndex;
+    document.getElementById('btn-rep-start').disabled = (total <= 1 || idx <= 0);
+    document.getElementById('btn-rep-prev').disabled = (total <= 1 || idx <= 0);
+    document.getElementById('btn-rep-next').disabled = (total <= 1 || idx >= total - 1);
+    document.getElementById('btn-rep-end').disabled = (total <= 1 || idx >= total - 1);
+}
+
+function jumpToReplayPly(targetIdx) {
+    if (!state.gamePlies || targetIdx < 0 || targetIdx >= state.gamePlies.length) return;
+    state.replayIndex = targetIdx;
+    var targetPly = state.gamePlies[targetIdx];
+
+    if (targetIdx === state.gamePlies.length - 1) {
+        state.chess = new Chess(state.baseFen);
+    } else {
+        state.chess = new Chess(targetPly.fen);
+    }
+    state.selectedSq = null;
+    renderMoveHistoryStrip();
+    renderBoard();
+}
+
 function openGame(gameId) {
     var g = null;
     for (var i = 0; i < state.games.length; i++) {
@@ -300,20 +720,20 @@ function openGame(gameId) {
     state.arrows = [];
     state.arrowMode = false;
     updateArrowButton();
+    buildGameMoveHistory(g);
 
     showView('view-game');
 
-    // Falls Gegner ein Bot ist und der Bot in einer neu gestarteten Partie Weiß hat:
     var currentTurnPlayer = (g.turn === 'w') ? g.white_player : g.black_player;
-    var turnPlayerObj = findPlayer(currentTurnPlayer);
-    if (g.status === 'active' && turnPlayerObj && turnPlayerObj.is_bot) {
+    if (g.status === 'active' && isBotPlayer(currentTurnPlayer)) {
+        state.canMoveToday = false;
+        stopSandboxTimer();
         setupGameUI();
         renderBoard();
-        triggerBotTurn(g, turnPlayerObj);
+        triggerBotTurn(g, currentTurnPlayer);
         return;
     }
 
-    // Prüfen, ob der Spieler jetzt ziehen darf (am Zug + heute noch nicht gezogen)
     var isMyTurn = (g.status === 'active' && g.turn === state.mySide);
     var myLastDate = (state.mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
     var alreadyMovedToday = (myLastDate === state.serverToday);
@@ -321,7 +741,7 @@ function openGame(gameId) {
     state.canMoveToday = (isMyTurn && !alreadyMovedToday);
 
     if (state.canMoveToday) {
-        startSandboxTimer();
+        startSandboxTimer(g);
     } else {
         stopSandboxTimer();
     }
@@ -330,15 +750,34 @@ function openGame(gameId) {
     renderBoard();
 }
 
-function startSandboxTimer() {
-    stopSandboxTimer();
-    state.sandboxStartTs = Date.now();
-    state.sandboxSecondsLeft = SANDBOX_WAIT_SECONDS;
-    document.getElementById('timer-box').classList.remove('hidden');
+function getTimerStorageKey(game) {
+    return 'fc_sbx_' + game.id + '_' + (game.move_count || 0);
+}
 
-    // Sandkasten-Hilfen (Bedrohungs-Radar & Patzer-Warnung) freischalten
-    setSandboxHelpersEnabled(true);
+function startSandboxTimer(game) {
+    stopSandboxTimer();
+    var storageKey = getTimerStorageKey(game);
+    var savedStart = parseInt(localStorage.getItem(storageKey) || '0', 10);
+    var now = Date.now();
+
+    if (savedStart > 0 && now >= savedStart) {
+        state.sandboxStartTs = savedStart;
+    } else {
+        state.sandboxStartTs = now;
+        try { localStorage.setItem(storageKey, String(now)); } catch (e) {}
+    }
+
+    var initialElapsed = Math.floor((now - state.sandboxStartTs) / 1000);
+    state.sandboxSecondsLeft = Math.max(0, SANDBOX_WAIT_SECONDS - initialElapsed);
+
+    document.getElementById('timer-box').classList.remove('hidden');
+    setSandboxHelpersEnabled(state.sandboxSecondsLeft > 0);
     updateTimerUI();
+
+    if (state.sandboxSecondsLeft <= 0) {
+        updateSubmitButtonState();
+        return;
+    }
 
     state.sandboxTimerId = setInterval(function () {
         var elapsed = Math.floor((Date.now() - state.sandboxStartTs) / 1000);
@@ -347,7 +786,6 @@ function startSandboxTimer() {
             state.sandboxSecondsLeft = 0;
             clearInterval(state.sandboxTimerId);
             state.sandboxTimerId = null;
-            // Nach 60s: Starke Sandkasten-Hilfen automatisch abschalten!
             setSandboxHelpersEnabled(false);
             renderBoard();
         } else {
@@ -407,38 +845,49 @@ function updateTimerUI() {
 
 function setupGameUI() {
     var g = state.currentGame;
-    document.getElementById('game-title-bar').textContent = g.white_player + ' vs. ' + g.black_player;
+    var wName = formatDisplayName(g.white_player);
+    var bName = formatDisplayName(g.black_player);
 
-    var topName = (state.mySide === 'w') ? g.black_player + ' (Schwarz)' : g.white_player + ' (Weiß)';
-    var botName = (state.mySide === 'w') ? g.white_player + ' (Weiß)' : g.black_player + ' (Schwarz)';
+    document.getElementById('game-title-bar').textContent = wName + ' vs. ' + bName;
+
+    var topName = (state.mySide === 'w') ? bName + ' (Schwarz)' : wName + ' (Weiß)';
+    var botName = (state.mySide === 'w') ? wName + ' (Weiß)' : bName + ' (Schwarz)';
     document.getElementById('lbl-top-player').textContent = topName;
     document.getElementById('lbl-bottom-player').textContent = botName;
 
     var banner = document.getElementById('turn-banner');
     banner.className = 'turn-banner';
 
+    var actionsCard = document.getElementById('game-actions-card');
+    var submitBtn = document.getElementById('btn-submit-move');
+
     if (g.status !== 'active') {
-        banner.textContent = 'Partie beendet: ' + (g.result_reason || g.status);
+        banner.textContent = 'Nachbetrachtung: ' + (g.result_reason || g.status) + ' (Züge unten vor-/zurückblättern)';
         banner.classList.add('blue');
-    } else if (state.canMoveToday) {
-        banner.textContent = 'Du bist am Zug! Nutze das Brett zum Ausprobieren.';
-        banner.classList.add('green');
-    } else if (g.turn === state.mySide) {
-        banner.textContent = 'Du hast heute in dieser Partie schon gezogen. Nächster Zug ab 00:00 Uhr!';
-        banner.classList.add('orange');
+        actionsCard.classList.add('hidden');
+        submitBtn.classList.add('hidden');
     } else {
-        banner.textContent = 'Gegner ist am Zug. (Du kannst trotzdem Probe-Züge auf dem Brett testen)';
+        actionsCard.classList.remove('hidden');
+        submitBtn.classList.remove('hidden');
+
+        if (state.canMoveToday) {
+            banner.textContent = 'Du bist am Zug! Nutze das Brett zum Ausprobieren.';
+            banner.classList.add('green');
+        } else if (g.turn === state.mySide) {
+            banner.textContent = 'Du hast heute in dieser Partie schon gezogen. Nächster Zug ab 00:00 Uhr!';
+            banner.classList.add('orange');
+        } else {
+            banner.textContent = 'Gegner ist am Zug. (Du kannst trotzdem Probe-Züge auf dem Brett testen)';
+        }
     }
 
-    // Vor dem 1. Zug: "Beenden" statt "Aufgeben"
     var btnResignAbort = document.getElementById('btn-resign-abort');
     if (g.move_count <= 1) {
-        btnResignAbort.textContent = '✕ Spiel beenden (ohne Wertung)';
+        btnResignAbort.textContent = '✕ Spiel abbrechen (ohne Wertung)';
     } else {
         btnResignAbort.textContent = '🏳️ Aufgeben';
     }
 
-    // Remis-Banner prüfen
     var drawBanner = document.getElementById('draw-offer-banner');
     if (g.status === 'active' && g.draw_offered_by && g.draw_offered_by !== state.mySide) {
         drawBanner.classList.remove('hidden');
@@ -450,7 +899,7 @@ function setupGameUI() {
 }
 
 /* ============================================================================
- * 6. SCHACHBRETT RENDERN & LERN-HILFEN BERECHNEN
+ * 6. SCHACHBRETT RENDERN & NEUE KOMBI-HEATMAP / SCHACH-WARNUNG
  * ============================================================================ */
 function renderBoard() {
     var boardEl = document.getElementById('chessboard');
@@ -463,7 +912,10 @@ function renderBoard() {
     var showRadar = document.getElementById('chk-radar').checked && (state.sandboxSecondsLeft > 0);
     var showBlunder = document.getElementById('chk-blunder').checked && (state.sandboxSecondsLeft > 0);
 
-    // Legale Züge für ausgewähltes Feld berechnen
+    var legendEl = document.getElementById('heatmap-legend');
+    if (showHeat) legendEl.classList.remove('hidden');
+    else legendEl.classList.add('hidden');
+
     var legalTargets = {};
     if (state.selectedSq && showLegal) {
         var moves = state.chess.moves({ square: state.selectedSq, verbose: true });
@@ -472,8 +924,15 @@ function renderBoard() {
         }
     }
 
-    // Taktische Analyse (Heatmap & Bedrohungs-Radar)
     var analysis = analyzeBoardControl(state.chess, state.mySide);
+    var isKingInCheck = state.chess.in_check();
+    var turnColor = state.chess.turn();
+
+    // Welcher letzte Zug soll gelb hervorgehoben werden? (Entweder Replay-Stellung oder aktueller Spielzug)
+    var activeUci = (state.currentGame && state.currentGame.last_move_uci) ? state.currentGame.last_move_uci : '';
+    if (state.gamePlies && state.gamePlies[state.replayIndex] && state.gamePlies[state.replayIndex].uci) {
+        activeUci = state.gamePlies[state.replayIndex].uci;
+    }
 
     var files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
     for (var r = 0; r < 8; r++) {
@@ -487,38 +946,56 @@ function renderBoard() {
             sqDiv.className = 'square ' + (isLight ? 'sq-light' : 'sq-dark');
             sqDiv.setAttribute('data-sq', sqName);
 
-            // Auswahl & letzter Zug
             if (state.selectedSq === sqName) {
                 sqDiv.classList.add('sq-selected');
-            } else if (showLast && state.currentGame && state.currentGame.last_move_uci) {
-                var uci = state.currentGame.last_move_uci;
-                if (sqName === uci.substring(0, 2) || sqName === uci.substring(2, 4)) {
+            } else if (showLast && activeUci) {
+                if (sqName === activeUci.substring(0, 2) || sqName === activeUci.substring(2, 4)) {
                     sqDiv.classList.add('sq-last-move');
                 }
             }
 
-            // Raumkontrolle (Heatmap)
+            var piece = state.chess.get(sqName);
+
+            if (isKingInCheck && piece && piece.type === 'k' && piece.color === turnColor) {
+                sqDiv.classList.add('sq-in-check');
+            }
+
+            // Kombi-Heatmap: Netto-Dominanz + Scharfe Eck-Dreiecke + Mini-Bilanz
             if (showHeat) {
                 var myCtrl = analysis.myAttacks[sqName] || 0;
                 var oppCtrl = analysis.oppAttacks[sqName] || 0;
-                if (myCtrl > 0 && oppCtrl === 0) sqDiv.classList.add('sq-heat-mine');
-                else if (oppCtrl > 0 && myCtrl === 0) sqDiv.classList.add('sq-heat-opp');
-                else if (myCtrl > 0 && oppCtrl > 0) sqDiv.classList.add('sq-heat-both');
+                var netCtrl = myCtrl - oppCtrl;
+
+                if (netCtrl !== 0) {
+                    var tri = document.createElement('div');
+                    var valSpan = document.createElement('span');
+                    valSpan.className = 'heat-val';
+
+                    if (netCtrl > 0) {
+                        tri.className = 'heat-corner ' + (netCtrl >= 2 ? 'mine-2' : 'mine-1');
+                        valSpan.textContent = '+' + netCtrl;
+                        if (netCtrl >= 2) sqDiv.classList.add('sq-dom-strong-mine');
+                    } else {
+                        tri.className = 'heat-corner ' + (netCtrl <= -2 ? 'opp-2' : 'opp-1');
+                        valSpan.textContent = String(netCtrl);
+                        if (netCtrl <= -2) sqDiv.classList.add('sq-dom-strong-opp');
+                    }
+                    sqDiv.appendChild(tri);
+                    sqDiv.appendChild(valSpan);
+                }
             }
 
             // Bedrohungs-Radar (nur in den 60s!)
-            var piece = state.chess.get(sqName);
             if (showRadar && piece && piece.color === state.mySide && piece.type !== 'k') {
                 var attackers = analysis.oppAttacks[sqName] || 0;
                 var defenders = analysis.myAttacks[sqName] || 0;
                 if (attackers > 0 && defenders === 0) {
-                    sqDiv.classList.add('sq-hanging'); // Rot: Figur hängt komplett ungedeckt!
+                    sqDiv.classList.add('sq-hanging');
                 } else if (attackers > 0) {
-                    sqDiv.classList.add('sq-attacked'); // Orange: Figur wird angegriffen
+                    sqDiv.classList.add('sq-attacked');
                 }
             }
 
-            // Koordinaten am Rand
             if (c === 0) {
                 var rSpan = document.createElement('span');
                 rSpan.className = 'coord-rank';
@@ -532,7 +1009,6 @@ function renderBoard() {
                 sqDiv.appendChild(fSpan);
             }
 
-            // Figur einfügen
             if (piece) {
                 var svgContainer = document.createElement('div');
                 svgContainer.className = 'piece-svg';
@@ -540,7 +1016,6 @@ function renderBoard() {
                 sqDiv.appendChild(svgContainer.firstChild);
             }
 
-            // Punkte für mögliche Züge
             if (legalTargets[sqName] === 'move') {
                 var dot = document.createElement('div');
                 dot.className = 'legal-dot';
@@ -559,21 +1034,22 @@ function renderBoard() {
         }
     }
 
-    // Material-Waage aktualisieren
     updateMaterialDisplay(showMat);
-
-    // Patzer-Warnung (Gefahren-Warnung in den 60s) prüfen
     checkBlunderWarning(showBlunder, analysis);
-
-    // Pfeile rendern
     renderArrows();
-
-    // Zug-Bestätigen-Button prüfen
+    updateSandboxButtons();
     updateSubmitButtonState();
 }
 
+function updateSandboxButtons() {
+    if (!state.chess) return;
+    var hasMoves = state.chess.history().length > 0;
+    var inPastReplay = (state.gamePlies && state.replayIndex < state.gamePlies.length - 1);
+    document.getElementById('btn-undo-sandbox').disabled = !hasMoves;
+    document.getElementById('btn-reset-sandbox').disabled = (!hasMoves && !inPastReplay);
+}
+
 function onSquareClick(sqName) {
-    // 1. Pfeil-Zeichenmodus aktiv?
     if (state.arrowMode) {
         if (!state.arrowStartSq) {
             state.arrowStartSq = sqName;
@@ -589,7 +1065,6 @@ function onSquareClick(sqName) {
         return;
     }
 
-    // 2. Normales Figuren-Ziehen (Im Sandkasten darf man beliebig Züge ausprobieren!)
     if (!state.selectedSq) {
         var p = state.chess.get(sqName);
         if (p && p.color === state.chess.turn()) {
@@ -605,11 +1080,10 @@ function onSquareClick(sqName) {
         return;
     }
 
-    // Prüfen, ob Bauern-Umwandlung ansteht
     var movingPiece = state.chess.get(state.selectedSq);
     var isPromo = movingPiece && movingPiece.type === 'p' &&
-    ((movingPiece.color === 'w' && sqName.charAt(1) === '8') ||
-    (movingPiece.color === 'b' && sqName.charAt(1) === '1'));
+        ((movingPiece.color === 'w' && sqName.charAt(1) === '8') ||
+         (movingPiece.color === 'b' && sqName.charAt(1) === '1'));
 
     if (isPromo) {
         var testMoves = state.chess.moves({ square: state.selectedSq, verbose: true });
@@ -624,13 +1098,11 @@ function onSquareClick(sqName) {
         }
     }
 
-    // Zug im Sandkasten ausführen
     var moveObj = state.chess.move({ from: state.selectedSq, to: sqName, promotion: 'q' });
     if (moveObj) {
         state.selectedSq = null;
         renderBoard();
     } else {
-        // Falls auf eigene andere Figur geklickt wurde -> Auswahl wechseln
         var clickedP = state.chess.get(sqName);
         if (clickedP && clickedP.color === state.chess.turn()) {
             state.selectedSq = sqName;
@@ -647,12 +1119,8 @@ function onSquareClick(sqName) {
 function analyzeBoardControl(chessInstance, myColor) {
     var myAttacks = {};
     var oppAttacks = {};
-    var oppColor = (myColor === 'w') ? 'b' : 'w';
-
     var files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-    var fenParts = chessInstance.fen().split(' ');
 
-    // Wir prüfen für beide Farben alle Angriffs-/Deckungsfelder
     var colors = ['w', 'b'];
     for (var ci = 0; ci < colors.length; ci++) {
         var col = colors[ci];
@@ -721,7 +1189,7 @@ function getAttackedSquaresFrom(chessInstance, sq, piece) {
         while (inside(cf, cr)) {
             var target = toSq(cf, cr);
             res.push(target);
-            if (chessInstance.get(target)) break; // Strahl endet bei erster Figur
+            if (chessInstance.get(target)) break;
             cf += dirs[d][0];
             cr += dirs[d][1];
         }
@@ -742,7 +1210,7 @@ function checkBlunderWarning(showBlunder, analysis) {
         return;
     }
 
-    var lastMove = hist[0]; // Erster Probe-Halbzug des Spielers
+    var lastMove = hist[0];
     var movedSq = lastMove.to;
     var movedPiece = state.chess.get(movedSq);
 
@@ -772,6 +1240,11 @@ function updateMaterialDisplay(showMat) {
     }
 
     var wScore = 0, bScore = 0;
+    var counts = {
+        w: { q: 0, r: 0, b: 0, n: 0, p: 0 },
+        b: { q: 0, r: 0, b: 0, n: 0, p: 0 }
+    };
+
     var files = 'abcdefgh';
     for (var r = 1; r <= 8; r++) {
         for (var f = 0; f < 8; f++) {
@@ -779,22 +1252,44 @@ function updateMaterialDisplay(showMat) {
             if (p) {
                 if (p.color === 'w') wScore += PIECE_VALUES[p.type];
                 else bScore += PIECE_VALUES[p.type];
+                if (counts[p.color][p.type] !== undefined) {
+                    counts[p.color][p.type]++;
+                }
             }
         }
     }
 
+    var startSet = { q: 1, r: 2, b: 2, n: 2, p: 8 };
+    var order = ['q', 'r', 'b', 'n', 'p'];
+
+    var capturedByW = '';
+    var capturedByB = '';
+    for (var idx = 0; idx < order.length; idx++) {
+        var t = order[idx];
+        var missingB = Math.max(0, startSet[t] - counts.b[t]);
+        var missingW = Math.max(0, startSet[t] - counts.w[t]);
+        for (var m1 = 0; m1 < missingB; m1++) capturedByW += CAPTURE_SYMBOLS[t];
+        for (var m2 = 0; m2 < missingW; m2++) capturedByB += CAPTURE_SYMBOLS[t];
+    }
+
     var diff = wScore - bScore;
     var myAdv = (state.mySide === 'w') ? diff : -diff;
+    var myCaptured = (state.mySide === 'w') ? capturedByW : capturedByB;
+    var oppCaptured = (state.mySide === 'w') ? capturedByB : capturedByW;
+
+    var botText = myCaptured;
+    var topText = oppCaptured;
+
     if (myAdv > 0) {
-        botMatEl.textContent = 'Material: +' + myAdv;
-        topMatEl.textContent = '';
+        botText += (botText ? ' ' : '') + '(+' + myAdv + ')';
     } else if (myAdv < 0) {
-        topMatEl.textContent = 'Material: +' + Math.abs(myAdv);
-        botMatEl.textContent = '';
-    } else {
-        botMatEl.textContent = 'Material: Ausgeglichen (0)';
-        topMatEl.textContent = '';
+        topText += (topText ? ' ' : '') + '(+' + Math.abs(myAdv) + ')';
+    } else if (!botText && !topText) {
+        botText = 'Ausgeglichen (0)';
     }
+
+    botMatEl.textContent = botText;
+    topMatEl.textContent = topText;
 }
 
 /* ============================================================================
@@ -803,14 +1298,14 @@ function updateMaterialDisplay(showMat) {
 function renderArrows() {
     var svg = document.getElementById('arrow-overlay');
     var html = '<defs><marker id="arrowhead" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">' +
-    '<polygon points="0 0, 4 2, 0 4" fill="rgba(230, 126, 34, 0.9)"/></marker></defs>';
+        '<polygon points="0 0, 4 2, 0 4" fill="rgba(230, 126, 34, 0.9)"/></marker></defs>';
 
     for (var i = 0; i < state.arrows.length; i++) {
         var a = state.arrows[i];
         var c1 = sqToCoords(a.from);
         var c2 = sqToCoords(a.to);
         html += '<line x1="' + c1.x + '" y1="' + c1.y + '" x2="' + c2.x + '" y2="' + c2.y + '" ' +
-        'stroke="rgba(230, 126, 34, 0.85)" stroke-width="16" stroke-linecap="round" marker-end="url(#arrowhead)"/>';
+            'stroke="rgba(230, 126, 34, 0.85)" stroke-width="16" stroke-linecap="round" marker-end="url(#arrowhead)"/>';
     }
     svg.innerHTML = html;
 }
@@ -829,10 +1324,10 @@ function sqToCoords(sq) {
 function updateArrowButton() {
     var btn = document.getElementById('btn-arrow-mode');
     if (state.arrowMode) {
-        btn.textContent = '↗ Pfeil malen: AN';
+        btn.textContent = '↗ Pfeil: AN';
         btn.classList.add('btn-active-mode');
     } else {
-        btn.textContent = '↗ Pfeil malen: AUS';
+        btn.textContent = '↗ Pfeil: AUS';
         btn.classList.remove('btn-active-mode');
     }
 }
@@ -848,6 +1343,13 @@ function updateSubmitButtonState() {
         return;
     }
 
+    var inPastReplay = (state.gamePlies && state.replayIndex < state.gamePlies.length - 1);
+    if (inPastReplay) {
+        btn.disabled = true;
+        btn.textContent = 'Rückblick aktiv (Klicke auf „Aktuell ⏭“ zum Ziehen)';
+        return;
+    }
+
     var hist = state.chess.history({ verbose: true });
     if (state.sandboxSecondsLeft > 0) {
         btn.disabled = true;
@@ -860,7 +1362,7 @@ function updateSubmitButtonState() {
         btn.textContent = 'Ziehe jetzt deinen Zug auf dem Brett';
     } else {
         btn.disabled = true;
-        btn.textContent = 'Du hast ' + hist.length + ' Probe-Züge gemacht (Bitte auf 1 Zug zurücksetzen)';
+        btn.textContent = hist.length + ' Probe-Züge (Mit „← 1 Zug zurück“ auf 1 reduzieren)';
     }
 }
 
@@ -897,12 +1399,10 @@ function submitFinalMove() {
         state.canMoveToday = false;
         stopSandboxTimer();
 
-        // Prüfen, ob der Gegner ein Bot ist und die Partie noch läuft
         var nextPlayerName = (updatedGame.turn === 'w') ? updatedGame.white_player : updatedGame.black_player;
-        var nextPlayerObj = findPlayer(nextPlayerName);
 
-        if (updatedGame.status === 'active' && nextPlayerObj && nextPlayerObj.is_bot) {
-            triggerBotTurn(updatedGame, nextPlayerObj);
+        if (updatedGame.status === 'active' && isBotPlayer(nextPlayerName)) {
+            triggerBotTurn(updatedGame, nextPlayerName);
         } else {
             syncLobby(function () {
                 openGame(updatedGame.id);
@@ -932,15 +1432,16 @@ function evaluateGameEnd(chessInst) {
 }
 
 /* ============================================================================
- * 10. EINGEBAUTE SCHACH-ENGINES (4 STÄRKEN FÜR ALTE SMARTPHONES)
+ * 10. BOTGNUS ENGINE (ERÖFFNUNGSBUCH + TIEFE 1–5 + MOVE ORDERING + PST)
  * ============================================================================ */
-function triggerBotTurn(game, botPlayer) {
+function triggerBotTurn(game, botDbPlayerName) {
     var banner = document.getElementById('turn-banner');
-    banner.textContent = '🤖 ' + botPlayer.name + ' denkt nach...';
+    var depth = state.botDepth || 2;
+    banner.textContent = '🤖 ' + BOT_DISPLAY_NAME + ' berechnet ' + depth + ' ' + (depth === 1 ? 'Zug' : 'Züge') + ' im Voraus...';
 
     setTimeout(function () {
         var botChess = new Chess(game.fen);
-        var chosenMove = chooseBotMove(botChess, botPlayer.bot_level || 1);
+        var chosenMove = chooseBotMove(botChess, depth);
         if (!chosenMove) return;
 
         botChess.move(chosenMove);
@@ -950,74 +1451,97 @@ function triggerBotTurn(game, botPlayer) {
         callRpc('rpc_make_move', {
             pw: state.password,
             p_game_id: game.id,
-            p_player: botPlayer.name,
+            p_player: botDbPlayerName,
             p_new_fen: botChess.fen(),
-                p_move_uci: uci,
-                p_new_status: statusInfo.status,
-                p_reason: statusInfo.reason
-        }, function (err, updatedAfterBot) {
+            p_move_uci: uci,
+            p_new_status: statusInfo.status,
+            p_reason: statusInfo.reason
+        }, function () {
             syncLobby(function () {
                 openGame(game.id);
             });
         });
-    }, 750);
+    }, 450);
 }
 
-function chooseBotMove(chessInst, level) {
-    var moves = chessInst.moves({ verbose: true });
+function orderMoves(moves) {
+    for (var i = 0; i < moves.length; i++) {
+        var m = moves[i];
+        var prio = 0;
+        if (m.captured) {
+            prio += 100 + (PIECE_VALUES[m.captured] * 12) - PIECE_VALUES[m.piece];
+        }
+        if (m.promotion) {
+            prio += 90 + (PIECE_VALUES[m.promotion] * 10);
+        }
+        var toFile = m.to.charAt(0);
+        var toRank = m.to.charAt(1);
+        if ((toFile === 'd' || toFile === 'e') && (toRank === '4' || toRank === '5')) {
+            prio += 4;
+        }
+        m._prio = prio;
+    }
+    moves.sort(function (a, b) { return b._prio - a._prio; });
+    return moves;
+}
+
+function chooseBotMove(chessInst, depth) {
+    var moves = orderMoves(chessInst.moves({ verbose: true }));
     if (moves.length === 0) return null;
 
-    // Level 1: Zufalls-Zieher (Elo 350)
-    if (level <= 1) {
-        return moves[Math.floor(Math.random() * moves.length)];
-    }
+    var searchDepth = Math.max(1, Math.min(5, parseInt(depth, 10) || 2));
 
-    // Level 2: Gieriger Bauer (Elo 500) - Nimmt sofort beste schlagbare Figur
-    var botColor = chessInst.turn();
-    if (level === 2) {
-        var bestScore = -9999;
-        var bestMoves = [];
-        for (var i = 0; i < moves.length; i++) {
-            chessInst.move(moves[i]);
-            var sc = evaluatePosition(chessInst, botColor);
-            chessInst.undo();
-            if (sc > bestScore) { bestScore = sc; bestMoves = [moves[i]]; }
-            else if (sc === bestScore) { bestMoves.push(moves[i]); }
+    // Ab Stärke 2 prüft Botgnus zuerst das Eröffnungsbuch für abwechslungsreiche Klassiker-Eröffnungen
+    if (searchDepth >= 2) {
+        var boardPlacement = chessInst.fen().split(' ')[0];
+        var bookCandidates = OPENING_BOOK[boardPlacement];
+        if (bookCandidates && bookCandidates.length > 0) {
+            var chosenUci = bookCandidates[Math.floor(Math.random() * bookCandidates.length)];
+            for (var b = 0; b < moves.length; b++) {
+                if (moves[b].from + moves[b].to === chosenUci) {
+                    return moves[b];
+                }
+            }
         }
-        return bestMoves[Math.floor(Math.random() * bestMoves.length)];
     }
 
-    // Level 3 (Tiefe 2) & Level 4 (Tiefe 3): Minimax mit Alpha-Beta-Suche
-    var depth = (level === 3) ? 2 : 3;
-    var bestVal = -99999;
+    var botColor = chessInst.turn();
+    var nextColor = (botColor === 'w') ? 'b' : 'w';
+
+    var bestVal = -999999;
     var topMove = moves[0];
 
     for (var m = 0; m < moves.length; m++) {
-        chessInst.move(moves[m]);
-        var val = -negamax(chessInst, depth - 1, -100000, 100000, (botColor === 'w' ? 'b' : 'w'));
+        var move = moves[m];
+        chessInst.move(move);
+        var val = -negamax(chessInst, searchDepth - 1, -1000000, 1000000, nextColor, move.to);
         chessInst.undo();
-        // Kleine Zufallsstreuung bei gleichen Zügen
-        val += (Math.random() * 0.15);
+
+        val += (Math.random() * 0.12);
+
         if (val > bestVal) {
             bestVal = val;
-            topMove = moves[m];
+            topMove = move;
         }
     }
     return topMove;
 }
 
-function negamax(chessInst, depth, alpha, beta, colorToMove) {
+function negamax(chessInst, depth, alpha, beta, colorToMove, lastMovedSq) {
     if (depth === 0 || chessInst.game_over()) {
-        return evaluatePosition(chessInst, colorToMove);
+        return evaluatePosition(chessInst, colorToMove, lastMovedSq);
     }
-    var moves = chessInst.moves({ verbose: true });
-    var maxVal = -99999;
+
+    var moves = orderMoves(chessInst.moves({ verbose: true }));
+    var maxVal = -999999;
     var nextColor = (colorToMove === 'w') ? 'b' : 'w';
 
     for (var i = 0; i < moves.length; i++) {
-        chessInst.move(moves[i]);
-        var score = -negamax(chessInst, depth - 1, -beta, -alpha, nextColor);
+        var mv = moves[i];
+        chessInst.move(mv);
+        var score = -negamax(chessInst, depth - 1, -beta, -alpha, nextColor, mv.to);
         chessInst.undo();
+
         if (score > maxVal) maxVal = score;
         if (score > alpha) alpha = score;
         if (alpha >= beta) break;
@@ -1025,26 +1549,59 @@ function negamax(chessInst, depth, alpha, beta, colorToMove) {
     return maxVal;
 }
 
-function evaluatePosition(chessInst, perspectiveColor) {
+function evaluatePosition(chessInst, perspectiveColor, lastMovedSq) {
     if (chessInst.in_checkmate()) {
-        return (chessInst.turn() === perspectiveColor) ? -9000 : 9000;
+        return (chessInst.turn() === perspectiveColor) ? -90000 : 90000;
     }
-    if (chessInst.in_draw()) return 0;
+    if (chessInst.in_draw() || chessInst.in_stalemate() || chessInst.in_threefold_repetition()) {
+        return 0;
+    }
 
     var total = 0;
     var files = 'abcdefgh';
+
     for (var r = 1; r <= 8; r++) {
         for (var f = 0; f < 8; f++) {
             var sq = files.charAt(f) + r;
             var p = chessInst.get(sq);
             if (!p) continue;
-            var val = PIECE_VALUES[p.type] * 10;
-            // Leichter Zentrums-Bonus für gutes Positionsspiel
-            if (f >= 2 && f <= 5 && r >= 3 && r <= 6) val += 1;
+
+            var baseVal = PIECE_VALUES[p.type] * 10;
+            var pstRow = (p.color === 'w') ? (8 - r) : (r - 1);
+            var pstBonus = (PST[p.type] && PST[p.type][pstRow]) ? PST[p.type][pstRow][f] : 0;
+            var val = baseVal + pstBonus;
+
             if (p.color === perspectiveColor) total += val;
             else total -= val;
         }
     }
+
+    // Horizont-Schutz gegen unlogische Figuren-Opfer im letzten berechneten Halbzug
+    if (lastMovedSq) {
+        var targetPiece = chessInst.get(lastMovedSq);
+        if (targetPiece && targetPiece.type !== 'k') {
+            var sideToMoveMoves = chessInst.moves({ verbose: true });
+            var canBeCaptured = false;
+            var lowestAttackerVal = 99;
+            for (var k = 0; k < sideToMoveMoves.length; k++) {
+                if (sideToMoveMoves[k].to === lastMovedSq) {
+                    canBeCaptured = true;
+                    var attVal = PIECE_VALUES[sideToMoveMoves[k].piece];
+                    if (attVal < lowestAttackerVal) lowestAttackerVal = attVal;
+                }
+            }
+            if (canBeCaptured) {
+                var victimVal = PIECE_VALUES[targetPiece.type];
+                var penalty = Math.max(2, (victimVal - lowestAttackerVal * 0.5) * 7);
+                if (targetPiece.color === perspectiveColor) {
+                    total -= penalty;
+                } else {
+                    total += penalty;
+                }
+            }
+        }
+    }
+
     return total;
 }
 
@@ -1060,9 +1617,9 @@ function findPlayer(name) {
 
 function escapeHtml(str) {
     return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -1071,7 +1628,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('btn-login').onclick = function () {
         attemptLogin(
             document.getElementById('inp-name').value,
-                     document.getElementById('inp-pw').value
+            document.getElementById('inp-pw').value
         );
     };
 
@@ -1085,6 +1642,46 @@ document.addEventListener('DOMContentLoaded', function () {
         showView('view-login');
     };
 
+    var tabBtns = document.querySelectorAll('.tab-btn');
+    for (var t = 0; t < tabBtns.length; t++) {
+        tabBtns[t].onclick = function () {
+            switchLobbyTab(this.getAttribute('data-tab'));
+        };
+    }
+
+    document.getElementById('btn-goto-highscore').onclick = function () {
+        switchLobbyTab('tab-highscore');
+    };
+
+    var botSlider = document.getElementById('inp-bot-depth');
+    botSlider.oninput = function () {
+        state.botDepth = parseInt(this.value, 10) || 2;
+        localStorage.setItem('fc_bot_depth', String(state.botDepth));
+        updateBotSliderLabel();
+    };
+    botSlider.onchange = botSlider.oninput;
+
+    document.getElementById('btn-start-bot').onclick = function () {
+        if (hasActiveBotGame()) {
+            alert('Es läuft bereits ein Spiel gegen Botgnus.');
+            return;
+        }
+        var dbBotName = resolveBotDbName();
+        startNewGame(dbBotName);
+    };
+
+    var histFilterBtns = document.querySelectorAll('.hist-filter-btn');
+    for (var hf = 0; hf < histFilterBtns.length; hf++) {
+        histFilterBtns[hf].onclick = function () {
+            for (var k = 0; k < histFilterBtns.length; k++) {
+                histFilterBtns[k].classList.remove('active');
+            }
+            this.classList.add('active');
+            state.historyFilter = this.getAttribute('data-filter');
+            renderLobby();
+        };
+    }
+
     document.getElementById('btn-back-lobby').onclick = function () {
         stopSandboxTimer();
         syncLobby(function () {
@@ -1092,11 +1689,34 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
-    document.getElementById('btn-reset-sandbox').onclick = function () {
-        if (!state.currentGame) return;
-        state.chess = new Chess(state.baseFen);
+    document.getElementById('btn-undo-sandbox').onclick = function () {
+        if (!state.chess) return;
+        state.chess.undo();
         state.selectedSq = null;
         renderBoard();
+    };
+
+    document.getElementById('btn-reset-sandbox').onclick = function () {
+        if (!state.currentGame) return;
+        state.replayIndex = state.gamePlies.length - 1;
+        state.chess = new Chess(state.baseFen);
+        state.selectedSq = null;
+        renderMoveHistoryStrip();
+        renderBoard();
+    };
+
+    // Replay-Buttons für Zughistorie
+    document.getElementById('btn-rep-start').onclick = function () {
+        jumpToReplayPly(0);
+    };
+    document.getElementById('btn-rep-prev').onclick = function () {
+        jumpToReplayPly(state.replayIndex - 1);
+    };
+    document.getElementById('btn-rep-next').onclick = function () {
+        jumpToReplayPly(state.replayIndex + 1);
+    };
+    document.getElementById('btn-rep-end').onclick = function () {
+        jumpToReplayPly(state.gamePlies.length - 1);
     };
 
     document.getElementById('btn-arrow-mode').onclick = function () {
@@ -1117,7 +1737,6 @@ document.addEventListener('DOMContentLoaded', function () {
         submitFinalMove();
     };
 
-    // Checkboxen für Lern-Hilfen live umschalten
     var helperIds = ['chk-legal', 'chk-lastmove', 'chk-material', 'chk-heatmap', 'chk-radar', 'chk-blunder'];
     for (var i = 0; i < helperIds.length; i++) {
         document.getElementById(helperIds[i]).onchange = function () {
@@ -1125,7 +1744,6 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
-    // Bauern-Umwandlung Auswahl
     var promoBtns = document.querySelectorAll('.promo-btn');
     for (var j = 0; j < promoBtns.length; j++) {
         promoBtns[j].onclick = function () {
@@ -1144,13 +1762,12 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
-    // Partie-Aktionen: Beenden / Aufgeben / Remis
     document.getElementById('btn-resign-abort').onclick = function () {
         if (!state.currentGame || state.currentGame.status !== 'active') return;
         var isAbort = (state.currentGame.move_count <= 1);
         var msg = isAbort
-        ? 'Möchtest du die Partie wirklich vorzeitig beenden (ohne Elo-Änderung)?'
-        : 'Möchtest du die Partie wirklich aufgeben?';
+            ? 'Möchtest du die Partie wirklich vorzeitig abbrechen (ohne Elo-Änderung)?'
+            : 'Möchtest du die Partie wirklich aufgeben?';
 
         if (!confirm(msg)) return;
 
@@ -1194,7 +1811,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
-    // Regel-Modal
     document.getElementById('btn-rules-modal').onclick = function () {
         document.getElementById('modal-rules').classList.remove('hidden');
     };
@@ -1213,11 +1829,9 @@ document.addEventListener('DOMContentLoaded', function () {
         canvas.height = 192;
         var ctx = canvas.getContext('2d');
 
-        // Dunkler edler Hintergrund
         ctx.fillStyle = '#1e242b';
         ctx.fillRect(0, 0, 192, 192);
 
-        // 2x2 Schachbrett-Muster in der Mitte
         ctx.fillStyle = '#f0d9b5';
         ctx.fillRect(20, 20, 76, 76);
         ctx.fillRect(96, 96, 76, 76);
@@ -1225,12 +1839,10 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.fillRect(96, 20, 76, 76);
         ctx.fillRect(20, 96, 76, 76);
 
-        // Goldener Rahmen um das Brett
         ctx.strokeStyle = '#f39c12';
         ctx.lineWidth = 6;
         ctx.strokeRect(20, 20, 152, 152);
 
-        // Schachfigur (Springer-Symbol) in die Mitte setzen
         ctx.fillStyle = '#1e242b';
         ctx.font = 'bold 115px sans-serif';
         ctx.textAlign = 'center';
@@ -1239,13 +1851,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var dataUrl = canvas.toDataURL('image/png');
 
-        // Icon für iOS ("Zum Home-Bildschirm") setzen
         var appleIcon = document.createElement('link');
         appleIcon.rel = 'apple-touch-icon';
         appleIcon.href = dataUrl;
         document.head.appendChild(appleIcon);
 
-        // Normales Favicon für den Browser-Tab setzen
         var favIcon = document.createElement('link');
         favIcon.rel = 'icon';
         favIcon.type = 'image/png';
