@@ -2146,7 +2146,7 @@ function enablePushNotifications() {
                 btn.textContent = '🔔';
                 return;
             }
-            btn.textContent = '🔔 Aktiv';
+            btn.textContent = '🔔';
             btn.classList.add('btn-active-mode');
             localStorage.setItem('fc_push_enabled', '1');
             alert('Push-Benachrichtigungen für ' + state.userName + ' sind jetzt auf diesem Gerät aktiv!');
