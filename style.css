@@ -817,3 +817,63 @@ input[type="text"], input[type="password"] {
 .replay-controls {
     margin-bottom: 0;
 }
+/* Admin-Einstellungen Modal */
+input[type="number"] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    border: 1px solid #455261;
+    background: #1a2026;
+    color: #fff;
+    font-size: 1rem;
+}
+
+.admin-divider {
+    border: none;
+    border-top: 1px solid #394654;
+    margin: 10px 0 14px 0;
+}
+
+.admin-check-row {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: flex-start;
+    align-items: flex-start;
+    font-size: 0.85rem;
+    line-height: 1.35;
+    margin-bottom: 10px;
+    cursor: pointer;
+    color: #ecf0f1;
+}
+
+.admin-check-row input[type="checkbox"] {
+    margin-right: 8px;
+    margin-top: 3px;
+}
+
+.admin-game-box {
+    background: #1b2229;
+    border: 1px solid #485e74;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 10px 0;
+}
+
+.admin-msg {
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.84rem;
+    margin-top: 8px;
+    font-weight: 600;
+}
+.admin-msg.ok {
+    background: rgba(46, 204, 113, 0.2);
+    border: 1px solid #27ae60;
+    color: #2ecc71;
+}
+.admin-msg.err {
+    background: rgba(231, 76, 60, 0.2);
+    border: 1px solid #c0392b;
+    color: #ff7675;
+}

@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Schach">
 
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
   <!-- Bewährte ES5-kompatible chess.js Version für Regelprüfung (läuft auch auf iOS 10) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 </head>
@@ -21,7 +21,7 @@
   <div id="view-login" class="view">
     <div class="card login-card">
       <h1>♟️ Familien-Schach</h1>
-      <p class="subtitle">Maximal 1 Zug pro Tag · 60s Bedenkzeit</p>
+      <p id="lbl-login-subtitle" class="subtitle">Maximal 1 Zug pro Tag &amp; Spiel · 60s Bedenkzeit</p>
 
       <label for="inp-name">Dein Vorname</label>
       <input type="text" id="inp-name" placeholder="z. B. Toni" autocomplete="off">
@@ -42,8 +42,9 @@
         <span id="lbl-user-elo" class="badge">500 Elo</span>
       </div>
       <div>
-        <button id="btn-refresh" class="btn btn-small">↻ Aktualisieren</button>
-        <button id="btn-push-toggle" class="btn btn-small btn-outline">🔔</button>
+        <button id="btn-refresh" class="btn btn-small">↻</button>
+        <button id="btn-push-toggle" class="btn btn-small btn-outline" title="Push-Benachrichtigungen">🔔</button>
+        <button id="btn-admin-lobby" class="btn btn-small btn-outline" title="Admin-Einstellungen">⚙️</button>
         <button id="btn-logout" class="btn btn-small btn-outline">Abmelden</button>
       </div>
     </header>
@@ -177,11 +178,14 @@
     <header class="top-bar">
       <button id="btn-back-lobby" class="btn btn-small">← Startseite</button>
       <div id="game-title-bar" class="game-header-info">Partie</div>
-      <button id="btn-rules-modal" class="btn btn-small btn-outline">Hilfe</button>
+      <div>
+        <button id="btn-admin-game" class="btn btn-small btn-outline" title="Admin-Einstellungen">⚙️</button>
+        <button id="btn-rules-modal" class="btn btn-small btn-outline">Hilfe</button>
+      </div>
     </header>
 
     <div class="container game-container">
-      <!-- Status- & 60s-Timer-Balken -->
+      <!-- Status- & Timer-Balken -->
       <div id="turn-banner" class="turn-banner">Lade Partie...</div>
 
       <div id="timer-box" class="timer-box hidden">
@@ -212,7 +216,7 @@
         <span id="lbl-bottom-material" class="material-info"></span>
       </div>
 
-      <!-- Gefahren-Warnung (Patzer-Schutz in den 60s) -->
+      <!-- Gefahren-Warnung (Patzer-Schutz in der Sandkasten-Phase) -->
       <div id="blunder-warning" class="warning-banner hidden"></div>
 
       <!-- Haupt-Steuerung für den Sandkasten & Zug -->
@@ -264,11 +268,11 @@
           </label>
           <label class="toggle-item sandbox-only" id="lbl-chk-radar">
             <input type="checkbox" id="chk-radar" checked>
-            <span>⏱️ Bedrohungs-Radar (60s)</span>
+            <span>⏱️ Bedrohungs-Radar</span>
           </label>
           <label class="toggle-item sandbox-only" id="lbl-chk-blunder">
             <input type="checkbox" id="chk-blunder" checked>
-            <span>⏱️ Patzer-Warnung (60s)</span>
+            <span>⏱️ Patzer-Warnung</span>
           </label>
         </div>
         <div id="heatmap-legend" class="heatmap-legend hidden">
@@ -311,21 +315,69 @@
       <h3>🎮 Steuerung auf dem Brett</h3>
       <ul class="rules-list">
         <li><strong>Figur bewegen (2-Tipp-Steuerung):</strong> Tippe zuerst deine Figur an (grüne Punkte zeigen mögliche Wege) und tippe danach auf das Zielfeld.</li>
-        <li><strong>60s Sandkasten-Modus:</strong> Nach dem Öffnen der Partie läuft ein 60-Sekunden-Timer (wird gespeichert). Währenddessen kannst du beliebig viele Züge zur Probe durchspielen!</li>
+        <li><strong>Sandkasten-Modus:</strong> Nach dem Öffnen der Partie läuft der Bedenkzeit-Timer. Währenddessen kannst du beliebig viele Züge zur Probe durchspielen!</li>
         <li><strong>Zughistorie &amp; Nachspielen:</strong> Über die Leiste <em>„📋 Zughistorie“</em> kannst du frühere Züge der Partie Schritt für Schritt vor- und zurückblättern.</li>
-        <li><strong>Feld-Dominanz (Neue Heatmap):</strong> Zeigt über scharfe Eck-Dreiecke und kleine Zahlen (<code>+1</code>, <code>-2</code>) nur Felder mit echter Überzahl an. Ausgeglichene Felder bleiben ruhig.</li>
-        <li><strong>Zug absenden:</strong> Nach Ablauf der 60 Sekunden muss genau <strong>dein 1 geplanter Zug</strong> auf dem Brett stehen – dann wird der grüne Bestätigen-Button aktiv.</li>
+        <li><strong>Feld-Dominanz (Heatmap):</strong> Zeigt über scharfe Eck-Dreiecke und kleine Zahlen (<code>+1</code>, <code>-2</code>) nur Felder mit echter Überzahl an.</li>
+        <li><strong>Zug absenden:</strong> Nach Ablauf der Bedenkzeit muss genau <strong>dein 1 geplanter Zug</strong> auf dem Brett stehen – dann wird der grüne Bestätigen-Button aktiv.</li>
       </ul>
 
       <h3>📖 Familien-Regeln &amp; Botgnus</h3>
       <ul class="rules-list">
-        <li><strong>1 Zug pro Tag:</strong> Jeder Spieler darf pro Partie 1× am Kalendertag ziehen (Reset um 00:00 Uhr).</li>
-        <li><strong>Botgnus:</strong> Du kannst maximal 1 aktives Spiel gegen Botgnus gleichzeitig führen. Seine Rechentiefe (1 bis 5 Züge im Voraus) stellst du per Schieberegler ein. Ab Stufe 2 nutzt er zudem ein klassisches Eröffnungsrepertoire.</li>
+        <li><strong>Züge pro Tag &amp; Spiel:</strong> Deine Züge zählen für jede Partie unabhängig (Reset um 00:00 Uhr). Hast du mehrere Spiele offen, darfst du in jedem Spiel ziehen!</li>
+        <li><strong>Botgnus:</strong> Du kannst maximal 1 aktives Spiel gegen Botgnus gleichzeitig führen.</li>
       </ul>
       <button id="btn-close-rules" class="btn btn-primary btn-block">Verstanden</button>
     </div>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <!-- ================= ADMIN-EINSTELLUNGEN MODAL ================= -->
+  <div id="modal-admin" class="modal hidden">
+    <div class="modal-content">
+      <div class="section-header">
+        <h3>⚙️ Admin-Einstellungen</h3>
+        <button id="btn-close-admin" class="btn btn-small btn-outline">✕</button>
+      </div>
+
+      <label for="inp-admin-pw">🔑 Admin-Passwort</label>
+      <input type="password" id="inp-admin-pw" placeholder="Admin-Passwort eingeben">
+
+      <hr class="admin-divider">
+
+      <label for="inp-admin-wait">⏱️ Bedenkzeit / Sandkasten-Wartezeit (in Sekunden)</label>
+      <input type="number" id="inp-admin-wait" min="0" max="600" step="5" value="60">
+
+      <label for="inp-admin-max-moves">♟️ Erlaubte Züge pro Tag &amp; pro Spiel</label>
+      <input type="number" id="inp-admin-max-moves" min="1" max="100" step="1" value="1">
+
+      <label class="admin-check-row">
+        <input type="checkbox" id="chk-admin-unlim-global">
+        <span>🔓 <strong>Globaler Freispiel-Modus:</strong> Tageslimit für <em>alle</em> Partien temporär aussetzen (unbegrenzt viele Züge pro Tag)</span>
+      </label>
+
+      <!-- Zusatz-Optionen, wenn ein konkretes Spiel geöffnet ist -->
+      <div id="admin-current-game-box" class="admin-game-box hidden">
+        <strong id="lbl-admin-game-title">Aktuelle Partie</strong>
+        <label class="admin-check-row" style="margin-top:8px;">
+          <input type="checkbox" id="chk-admin-unlim-game">
+          <span>🔓 Tageslimit <strong>nur für diese Partie</strong> temporär aussetzen</span>
+        </label>
+        <button id="btn-admin-reset-game" class="btn btn-secondary btn-small btn-block" style="margin-top:8px;">
+          ↺ Tages-Counter für diese Partie zurücksetzen (Extra-Zug heute)
+        </button>
+      </div>
+
+      <div id="admin-status-msg" class="admin-msg hidden"></div>
+
+      <button id="btn-admin-save" class="btn btn-primary btn-block" style="margin-top:10px;">
+        💾 Einstellungen speichern
+      </button>
+
+      <button id="btn-admin-reset-all" class="btn btn-outline btn-block" style="margin-top:8px;">
+        ↺ Tages-Counter für ALLE aktiven Spiele zurücksetzen
+      </button>
+    </div>
+  </div>
+
+  <script src="app.js?v=3"></script>
 </body>
 </html>

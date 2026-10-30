@@ -7,9 +7,7 @@ var SUPABASE_URL = 'https://tkxwgshnsxvvrwghmois.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRreHdnc2huc3h2dnJ3Z2htb2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNzg5MDcsImV4cCI6MjEwNzc1NDkwN30.DyNlKFtStR0sOPsYjJHxZPRL11YoqReMv2QMMKTNJ04';
 var VAPID_PUBLIC_KEY = 'BA-9ii-6pQbhCMLo-MEvNUMc5ejBU5R5-fkOk4LX3n2ea8cK_VTIjpahOmu-ajl0bz3xkLmIb-G1UxPxykqK6b0';
 
-
 var ELO_K_FACTOR = 20;
-var SANDBOX_WAIT_SECONDS = 60;
 var BOT_DISPLAY_NAME = 'Botgnus';
 
 // App-Status
@@ -17,13 +15,18 @@ var state = {
     userName: '',
     password: '',
     serverToday: '',
+    settings: {
+        sandbox_wait_seconds: 60,
+        max_moves_per_day: 1,
+        unlimited_moves_global: false
+    },
     players: [],
     games: [],
     currentGame: null,
     chess: null,          // Aktuelle Brettstellung (inkl. Sandkasten-Probezüge)
     baseFen: '',          // Echte gespeicherte Stellung der Partie
     mySide: 'w',          // 'w' oder 'b'
-    canMoveToday: false,  // Bin ich am Zug UND habe heute noch nicht gezogen?
+    canMoveToday: false,  // Bin ich am Zug UND darf heute in diesem Spiel noch ziehen?
     selectedSq: null,
     pendingPromoMove: null,
     sandboxStartTs: 0,
@@ -52,48 +55,33 @@ var pKeys = ['p', 'r', 'n', 'b', 'q', 'k'];
 for (var i = 0; i < pKeys.length; i++) {
     var k = pKeys[i];
     PIECE_SVGS['b' + k] = PIECE_SVGS['w' + k]
-        .replace('fill="#ffffff"', 'fill="#262b30"')
-        .replace('stroke="#111"', 'stroke="#f5f6fa"');
+    .replace('fill="#ffffff"', 'fill="#262b30"')
+    .replace('stroke="#111"', 'stroke="#f5f6fa"');
 }
 
 var PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 var CAPTURE_SYMBOLS = { q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 
-// Kompaktes Eröffnungsbuch für Botgnus (anhand der Figurenstellung im FEN -> passende Klassiker-Züge)
 var OPENING_BOOK = {
-    // 1. Zug Weiß (Startstellung)
     'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR': ['e2e4', 'd2d4', 'g1f3', 'c2c4'],
-    // 1. Zug Schwarz nach 1. e4 (Offene Spiele, Sizilianisch, Französisch, Caro-Kann)
     'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR': ['e7e5', 'c7c5', 'e7e6', 'c7c6'],
-    // 1. Zug Schwarz nach 1. d4 (Damengambit, Indisch)
     'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR': ['d7d5', 'g8f6', 'e7e6'],
-    // 1. Zug Schwarz nach 1. Sf3 / 1. c4
     'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R': ['d7d5', 'g8f6', 'c7c5'],
     'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR': ['e7e5', 'g8f6', 'c7c5'],
-    // 2. Zug Weiß nach 1. e4 e5
     'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR': ['g1f3', 'b1c3', 'f1c4'],
-    // 2. Zug Weiß nach 1. e4 c5 (Sizilianisch)
     'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR': ['g1f3', 'b1c3', 'c2c3'],
-    // 2. Zug Weiß nach 1. e4 e6 (Französisch) & 1. e4 c6 (Caro-Kann)
     'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR': ['d2d4', 'b1c3', 'g1f3'],
     'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR': ['d2d4', 'b1c3', 'g1f3'],
-    // 2. Zug Weiß nach 1. d4 d5 & 1. d4 Sf6
     'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR': ['c2c4', 'g1f3', 'c1f4'],
     'rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR': ['c2c4', 'g1f3', 'c1f4'],
-    // 2. Zug Schwarz nach 1. e4 e5 2. Sf3
     'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R': ['b8c6', 'g8f6'],
-    // 2. Zug Schwarz nach 1. e4 c5 2. Sf3
     'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R': ['d7d6', 'b8c6', 'e7e6'],
-    // 2. Zug Schwarz nach 1. d4 d5 2. c4 (Damengambit angenommen/abgelehnt/Slawisch)
     'rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR': ['e7e6', 'c7c6', 'd5c4'],
-    // 3. Zug Weiß nach 1. e4 e5 2. Sf3 Sc6 (Italienisch, Spanisch, Schottisch)
     'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R': ['f1c4', 'f1b5', 'd2d4', 'b1c3'],
-    // 3. Zug Schwarz nach Italienisch (3. Lc4) & Spanisch (3. Lb5)
     'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R': ['f8c5', 'g8f6'],
     'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R': ['a7a6', 'g8f6']
 };
 
-// Kompakte Positionstabellen (Piece-Square-Tables aus Sicht von Weiß, Zeile 0 = Reihe 8 bis Zeile 7 = Reihe 1)
 var PST = {
     p: [
         [ 0,  0,  0,  0,  0,  0,  0,  0],
@@ -158,7 +146,7 @@ var PST = {
 };
 
 /* ============================================================================
- * 2. KOMPATIBLE SUPABASE REST-API FUNKTION (XMLHttpRequest für iOS 10)
+ * 2. KOMPATIBLE SUPABASE REST-API FUNKTION & ZUGLIMIT-HELFER
  * ============================================================================ */
 function callRpc(fnName, params, callback) {
     var xhr = new XMLHttpRequest();
@@ -184,6 +172,44 @@ function callRpc(fnName, params, callback) {
         }
     };
     xhr.send(JSON.stringify(params));
+}
+
+function getWaitSeconds() {
+    var s = state.settings && state.settings.sandbox_wait_seconds;
+    var val = parseInt(s, 10);
+    return isNaN(val) ? 60 : Math.max(0, val);
+}
+
+function getMaxMovesPerDay() {
+    var m = state.settings && state.settings.max_moves_per_day;
+    var val = parseInt(m, 10);
+    return (isNaN(val) || val < 1) ? 1 : val;
+}
+
+function isUnlimitedForGame(g) {
+    if (!g) return false;
+    return !!(state.settings.unlimited_moves_global || g.unlimited_moves);
+}
+
+// Ermittelt, wie viele Züge ich HEUTE in DIESEM Spiel g bereits gemacht habe
+function getMyMovesTodayInGame(g) {
+    if (!g) return 0;
+    var mySide = (g.white_player === state.userName) ? 'w' : 'b';
+    var myLastDate = (mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
+    if (myLastDate !== state.serverToday) return 0;
+
+    var count = (mySide === 'w') ? g.white_moves_today : g.black_moves_today;
+    if (typeof count === 'number') return count;
+    return 1; // Fallback für ältere Datensätze ohne Counter
+}
+
+function canPlayerMoveInGameToday(g) {
+    if (!g || g.status !== 'active') return false;
+    var mySide = (g.white_player === state.userName) ? 'w' : 'b';
+    if (g.turn !== mySide) return false;
+    if (isUnlimitedForGame(g)) return true;
+
+    return getMyMovesTodayInGame(g) < getMaxMovesPerDay();
 }
 
 /* ============================================================================
@@ -263,6 +289,22 @@ function applySyncData(data) {
     state.serverToday = data.today;
     state.players = data.players || [];
     state.games = data.games || [];
+    if (data.settings) {
+        state.settings = {
+            sandbox_wait_seconds: (data.settings.sandbox_wait_seconds !== undefined) ? data.settings.sandbox_wait_seconds : 60,
+            max_moves_per_day: (data.settings.max_moves_per_day !== undefined) ? data.settings.max_moves_per_day : 1,
+            unlimited_moves_global: !!data.settings.unlimited_moves_global
+        };
+    }
+
+    // Untertitel aktualisieren
+    var subEl = document.getElementById('lbl-login-subtitle');
+    if (subEl) {
+        var maxM = getMaxMovesPerDay();
+        var waitS = getWaitSeconds();
+        subEl.textContent = 'Maximal ' + maxM + (maxM === 1 ? ' Zug' : ' Züge') + ' pro Tag & Spiel · ' + waitS + 's Bedenkzeit';
+    }
+
     renderLobby();
 }
 
@@ -358,7 +400,7 @@ function renderLobby() {
         document.getElementById('hero-elo-value').textContent = me.elo;
         document.getElementById('hero-rank-badge').textContent = 'Platz ' + myRank;
         document.getElementById('hero-stats-line').textContent =
-            (me.wins || 0) + ' Siege · ' + (me.draws || 0) + ' Remis · ' + (me.losses || 0) + ' Niederlagen';
+        (me.wins || 0) + ' Siege · ' + (me.draws || 0) + ' Remis · ' + (me.losses || 0) + ' Niederlagen';
     }
 
     var activeContainer = document.getElementById('list-active-games');
@@ -443,13 +485,13 @@ function renderLobby() {
         var tr = document.createElement('tr');
         if (pl.name === state.userName) tr.className = 'me-row';
         tr.innerHTML =
-            '<td>' + (k + 1) + '.</td>' +
-            '<td><strong>' + escapeHtml(pl.name) + '</strong></td>' +
-            '<td><strong>' + pl.elo + '</strong></td>' +
-            '<td>' + (pl.wins || 0) + '</td>' +
-            '<td>' + (pl.draws || 0) + '</td>' +
-            '<td>' + (pl.losses || 0) + '</td>' +
-            '<td>' + winRate + '</td>';
+        '<td>' + (k + 1) + '.</td>' +
+        '<td><strong>' + escapeHtml(pl.name) + '</strong></td>' +
+        '<td><strong>' + pl.elo + '</strong></td>' +
+        '<td>' + (pl.wins || 0) + '</td>' +
+        '<td>' + (pl.draws || 0) + '</td>' +
+        '<td>' + (pl.losses || 0) + '</td>' +
+        '<td>' + winRate + '</td>';
         tbody.appendChild(tr);
     }
 
@@ -459,10 +501,9 @@ function renderLobby() {
 function getGamePriority(g) {
     var mySide = (g.white_player === state.userName) ? 'w' : 'b';
     var isMyTurn = (g.turn === mySide);
-    var myLastDate = (mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
-    var movedToday = (myLastDate === state.serverToday);
+    var canMove = canPlayerMoveInGameToday(g);
 
-    if (isMyTurn && !movedToday) return 1;
+    if (isMyTurn && canMove) return 1;
     if (!isMyTurn) return 2;
     return 3;
 }
@@ -475,20 +516,28 @@ function createActiveGameRow(g) {
     var isBotOpp = isBotPlayer(rawOppName);
 
     var isMyTurn = (g.turn === mySide);
-    var myLastDate = (mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
-    var movedToday = (myLastDate === state.serverToday);
+    var canMove = canPlayerMoveInGameToday(g);
+    var usedToday = getMyMovesTodayInGame(g);
+    var maxMoves = getMaxMovesPerDay();
+    var unlim = isUnlimitedForGame(g);
 
     var statusLabel = '';
     var extraClass = '';
 
-    if (isMyTurn && !movedToday) {
-        statusLabel = '🟢 Du bist am Zug!';
+    if (isMyTurn && canMove) {
+        if (unlim) {
+            statusLabel = '🟢 Du bist am Zug! (🔓 Freispiel aktiv)';
+        } else if (maxMoves > 1) {
+            statusLabel = '🟢 Du bist am Zug! (Heute ' + usedToday + '/' + maxMoves + ' Züge in diesem Spiel)';
+        } else {
+            statusLabel = '🟢 Du bist am Zug!';
+        }
         extraClass = ' my-turn';
-    } else if (isMyTurn && movedToday) {
-        statusLabel = '⏳ Heute schon gezogen (nächster Zug ab 00:00 Uhr)';
+    } else if (isMyTurn && !canMove) {
+        statusLabel = '⏳ Heute in diesem Spiel schon gezogen (' + usedToday + '/' + maxMoves + ' · ab 00:00 Uhr wieder)';
         extraClass = ' waiting-tomorrow';
     } else {
-        statusLabel = '⚪ Warte auf ' + oppDisplay;
+        statusLabel = '⚪ Warte auf ' + oppDisplay + (unlim ? ' (🔓 Freispiel)' : '');
     }
 
     var myColorBadge = (mySide === 'w') ? '♔ Weiß' : '♚ Schwarz';
@@ -496,11 +545,11 @@ function createActiveGameRow(g) {
 
     div.className = 'game-item' + extraClass;
     div.innerHTML =
-        '<div>' +
-        '<strong>' + oppIcon + escapeHtml(oppDisplay) + '</strong> <small>(' + myColorBadge + ' · Zug ' + (g.move_count || 1) + ')</small><br>' +
-        '<small>' + escapeHtml(statusLabel) + '</small>' +
-        '</div>' +
-        '<span>Spielen →</span>';
+    '<div>' +
+    '<strong>' + oppIcon + escapeHtml(oppDisplay) + '</strong> <small>(' + myColorBadge + ' · Zug ' + (g.move_count || 1) + ')</small><br>' +
+    '<small>' + escapeHtml(statusLabel) + '</small>' +
+    '</div>' +
+    '<span>Spielen →</span>';
 
     div.onclick = function () {
         openGame(g.id);
@@ -574,12 +623,12 @@ function createHistoryGameRow(g) {
 
     div.className = 'game-item ' + itemClass;
     div.innerHTML =
-        '<div>' +
-        '<span class="res-badge ' + badgeClass + '">' + badgeText + '</span>' +
-        '<strong>vs. ' + escapeHtml(oppDisplay) + '</strong> <small>(' + myColorLabel + ')</small><br>' +
-        '<small>' + escapeHtml(reason) + ' · ' + (g.move_count || 0) + ' Halbzüge</small>' +
-        '</div>' +
-        '<span>Analyse →</span>';
+    '<div>' +
+    '<span class="res-badge ' + badgeClass + '">' + badgeText + '</span>' +
+    '<strong>vs. ' + escapeHtml(oppDisplay) + '</strong> <small>(' + myColorLabel + ')</small><br>' +
+    '<small>' + escapeHtml(reason) + ' · ' + (g.move_count || 0) + ' Halbzüge</small>' +
+    '</div>' +
+    '<span>Analyse →</span>';
 
     div.onclick = function () {
         openGame(g.id);
@@ -609,11 +658,12 @@ function startNewGame(opponentName) {
 }
 
 /* ============================================================================
- * 5. SPIELBRETT ÖFFNEN, ZUGHISTORIE AUFBAUEN & 60S SANDKASTEN-TIMER
+ * 5. SPIELBRETT ÖFFNEN, ZUGHISTORIE AUFBAUEN & DYNAMISCHER SANDKASTEN-TIMER
  * ============================================================================ */
 function buildGameMoveHistory(game) {
     var plies = [];
-    var rawHistory = (game.move_history || '').trim();
+    // Unterstützt sowohl move_history als auch moves_history aus der DB
+    var rawHistory = (game.move_history || game.moves_history || '').trim();
 
     if (rawHistory) {
         var replayChess = new Chess();
@@ -624,8 +674,8 @@ function buildGameMoveHistory(game) {
             if (uci.length >= 4) {
                 var mv = replayChess.move({
                     from: uci.substring(0, 2),
-                    to: uci.substring(2, 4),
-                    promotion: uci.length > 4 ? uci.charAt(4) : 'q'
+                                          to: uci.substring(2, 4),
+                                          promotion: uci.length > 4 ? uci.charAt(4) : 'q'
                 });
                 if (mv) {
                     plies.push({ fen: replayChess.fen(), san: mv.san, uci: uci });
@@ -634,7 +684,6 @@ function buildGameMoveHistory(game) {
         }
     }
 
-    // Fallback, falls für ältere Spiele noch keine move_history in der DB vorlag
     if (plies.length === 0) {
         plies.push({ fen: game.fen, san: 'Aktuell', uci: game.last_move_uci || '' });
     }
@@ -736,11 +785,7 @@ function openGame(gameId) {
         return;
     }
 
-    var isMyTurn = (g.status === 'active' && g.turn === state.mySide);
-    var myLastDate = (state.mySide === 'w') ? g.white_last_move_date : g.black_last_move_date;
-    var alreadyMovedToday = (myLastDate === state.serverToday);
-
-    state.canMoveToday = (isMyTurn && !alreadyMovedToday);
+    state.canMoveToday = canPlayerMoveInGameToday(g);
 
     if (state.canMoveToday) {
         startSandboxTimer(g);
@@ -758,6 +803,16 @@ function getTimerStorageKey(game) {
 
 function startSandboxTimer(game) {
     stopSandboxTimer();
+    var waitTotal = getWaitSeconds();
+
+    if (waitTotal <= 0) {
+        state.sandboxSecondsLeft = 0;
+        document.getElementById('timer-box').classList.add('hidden');
+        setSandboxHelpersEnabled(false);
+        updateSubmitButtonState();
+        return;
+    }
+
     var storageKey = getTimerStorageKey(game);
     var savedStart = parseInt(localStorage.getItem(storageKey) || '0', 10);
     var now = Date.now();
@@ -770,7 +825,7 @@ function startSandboxTimer(game) {
     }
 
     var initialElapsed = Math.floor((now - state.sandboxStartTs) / 1000);
-    state.sandboxSecondsLeft = Math.max(0, SANDBOX_WAIT_SECONDS - initialElapsed);
+    state.sandboxSecondsLeft = Math.max(0, waitTotal - initialElapsed);
 
     document.getElementById('timer-box').classList.remove('hidden');
     setSandboxHelpersEnabled(state.sandboxSecondsLeft > 0);
@@ -782,8 +837,9 @@ function startSandboxTimer(game) {
     }
 
     state.sandboxTimerId = setInterval(function () {
+        var wSec = getWaitSeconds();
         var elapsed = Math.floor((Date.now() - state.sandboxStartTs) / 1000);
-        var left = SANDBOX_WAIT_SECONDS - elapsed;
+        var left = wSec - elapsed;
         if (left <= 0) {
             state.sandboxSecondsLeft = 0;
             clearInterval(state.sandboxTimerId);
@@ -830,7 +886,8 @@ function setSandboxHelpersEnabled(inSandboxWindow) {
 }
 
 function updateTimerUI() {
-    var pct = Math.min(100, Math.round(((SANDBOX_WAIT_SECONDS - state.sandboxSecondsLeft) / SANDBOX_WAIT_SECONDS) * 100));
+    var waitTotal = Math.max(1, getWaitSeconds());
+    var pct = Math.min(100, Math.round(((waitTotal - state.sandboxSecondsLeft) / waitTotal) * 100));
     var bar = document.getElementById('timer-bar');
     bar.style.width = pct + '%';
 
@@ -863,6 +920,10 @@ function setupGameUI() {
     var actionsCard = document.getElementById('game-actions-card');
     var submitBtn = document.getElementById('btn-submit-move');
 
+    var usedToday = getMyMovesTodayInGame(g);
+    var maxMoves = getMaxMovesPerDay();
+    var unlim = isUnlimitedForGame(g);
+
     if (g.status !== 'active') {
         banner.textContent = 'Nachbetrachtung: ' + (g.result_reason || g.status) + ' (Züge unten vor-/zurückblättern)';
         banner.classList.add('blue');
@@ -873,10 +934,16 @@ function setupGameUI() {
         submitBtn.classList.remove('hidden');
 
         if (state.canMoveToday) {
-            banner.textContent = 'Du bist am Zug! Nutze das Brett zum Ausprobieren.';
+            if (unlim) {
+                banner.textContent = 'Du bist am Zug! (🔓 Freispiel-Modus ohne Tageslimit)';
+            } else if (maxMoves > 1) {
+                banner.textContent = 'Du bist am Zug! (Zug ' + (usedToday + 1) + ' von ' + maxMoves + ' heute in dieser Partie)';
+            } else {
+                banner.textContent = 'Du bist am Zug! Nutze das Brett zum Ausprobieren.';
+            }
             banner.classList.add('green');
         } else if (g.turn === state.mySide) {
-            banner.textContent = 'Du hast heute in dieser Partie schon gezogen. Nächster Zug ab 00:00 Uhr!';
+            banner.textContent = 'Tageslimit in dieser Partie erreicht (' + usedToday + '/' + maxMoves + '). Nächster Zug ab 00:00 Uhr!';
             banner.classList.add('orange');
         } else {
             banner.textContent = 'Gegner ist am Zug. (Du kannst trotzdem Probe-Züge auf dem Brett testen)';
@@ -901,7 +968,7 @@ function setupGameUI() {
 }
 
 /* ============================================================================
- * 6. SCHACHBRETT RENDERN & NEUE KOMBI-HEATMAP / SCHACH-WARNUNG
+ * 6. SCHACHBRETT RENDERN & KOMBI-HEATMAP / SCHACH-WARNUNG
  * ============================================================================ */
 function renderBoard() {
     var boardEl = document.getElementById('chessboard');
@@ -930,7 +997,6 @@ function renderBoard() {
     var isKingInCheck = state.chess.in_check();
     var turnColor = state.chess.turn();
 
-    // Welcher letzte Zug soll gelb hervorgehoben werden? (Entweder Replay-Stellung oder aktueller Spielzug)
     var activeUci = (state.currentGame && state.currentGame.last_move_uci) ? state.currentGame.last_move_uci : '';
     if (state.gamePlies && state.gamePlies[state.replayIndex] && state.gamePlies[state.replayIndex].uci) {
         activeUci = state.gamePlies[state.replayIndex].uci;
@@ -962,7 +1028,6 @@ function renderBoard() {
                 sqDiv.classList.add('sq-in-check');
             }
 
-            // Kombi-Heatmap: Netto-Dominanz + Scharfe Eck-Dreiecke + Mini-Bilanz
             if (showHeat) {
                 var myCtrl = analysis.myAttacks[sqName] || 0;
                 var oppCtrl = analysis.oppAttacks[sqName] || 0;
@@ -987,7 +1052,6 @@ function renderBoard() {
                 }
             }
 
-            // Bedrohungs-Radar (nur in den 60s!)
             if (showRadar && piece && piece.color === state.mySide && piece.type !== 'k') {
                 var attackers = analysis.oppAttacks[sqName] || 0;
                 var defenders = analysis.myAttacks[sqName] || 0;
@@ -1084,8 +1148,8 @@ function onSquareClick(sqName) {
 
     var movingPiece = state.chess.get(state.selectedSq);
     var isPromo = movingPiece && movingPiece.type === 'p' &&
-        ((movingPiece.color === 'w' && sqName.charAt(1) === '8') ||
-         (movingPiece.color === 'b' && sqName.charAt(1) === '1'));
+    ((movingPiece.color === 'w' && sqName.charAt(1) === '8') ||
+    (movingPiece.color === 'b' && sqName.charAt(1) === '1'));
 
     if (isPromo) {
         var testMoves = state.chess.moves({ square: state.selectedSq, verbose: true });
@@ -1300,14 +1364,14 @@ function updateMaterialDisplay(showMat) {
 function renderArrows() {
     var svg = document.getElementById('arrow-overlay');
     var html = '<defs><marker id="arrowhead" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">' +
-        '<polygon points="0 0, 4 2, 0 4" fill="rgba(230, 126, 34, 0.9)"/></marker></defs>';
+    '<polygon points="0 0, 4 2, 0 4" fill="rgba(230, 126, 34, 0.9)"/></marker></defs>';
 
     for (var i = 0; i < state.arrows.length; i++) {
         var a = state.arrows[i];
         var c1 = sqToCoords(a.from);
         var c2 = sqToCoords(a.to);
         html += '<line x1="' + c1.x + '" y1="' + c1.y + '" x2="' + c2.x + '" y2="' + c2.y + '" ' +
-            'stroke="rgba(230, 126, 34, 0.85)" stroke-width="16" stroke-linecap="round" marker-end="url(#arrowhead)"/>';
+        'stroke="rgba(230, 126, 34, 0.85)" stroke-width="16" stroke-linecap="round" marker-end="url(#arrowhead)"/>';
     }
     svg.innerHTML = html;
 }
@@ -1368,7 +1432,6 @@ function updateSubmitButtonState() {
     }
 }
 
-// Hilfsfunktion für den deutschen Benachrichtigungstext:
 function formatGermanMoveText(playerName, move, statusInfo) {
     var pieceNames = {
         p: 'Bauer',
@@ -1443,7 +1506,6 @@ function submitFinalMove() {
         if (updatedGame.status === 'active' && isBotPlayer(nextPlayerName)) {
             triggerBotTurn(updatedGame, nextPlayerName);
         } else {
-            // Push-Benachrichtigung an das Familienmitglied senden:
             var moveText = formatGermanMoveText(state.userName, move, statusInfo);
             sendPushToOpponent(nextPlayerName, moveText, updatedGame.id);
 
@@ -1496,9 +1558,9 @@ function triggerBotTurn(game, botDbPlayerName) {
             p_game_id: game.id,
             p_player: botDbPlayerName,
             p_new_fen: botChess.fen(),
-            p_move_uci: uci,
-            p_new_status: statusInfo.status,
-            p_reason: statusInfo.reason
+                p_move_uci: uci,
+                p_new_status: statusInfo.status,
+                p_reason: statusInfo.reason
         }, function () {
             syncLobby(function () {
                 openGame(game.id);
@@ -1534,7 +1596,6 @@ function chooseBotMove(chessInst, depth) {
 
     var searchDepth = Math.max(1, Math.min(5, parseInt(depth, 10) || 2));
 
-    // Ab Stärke 2 prüft Botgnus zuerst das Eröffnungsbuch für abwechslungsreiche Klassiker-Eröffnungen
     if (searchDepth >= 2) {
         var boardPlacement = chessInst.fen().split(' ')[0];
         var bookCandidates = OPENING_BOOK[boardPlacement];
@@ -1619,7 +1680,6 @@ function evaluatePosition(chessInst, perspectiveColor, lastMovedSq) {
         }
     }
 
-    // Horizont-Schutz gegen unlogische Figuren-Opfer im letzten berechneten Halbzug
     if (lastMovedSq) {
         var targetPiece = chessInst.get(lastMovedSq);
         if (targetPiece && targetPiece.type !== 'k') {
@@ -1649,7 +1709,124 @@ function evaluatePosition(chessInst, perspectiveColor, lastMovedSq) {
 }
 
 /* ============================================================================
- * 11. EVENT-LISTENER & HILFSFUNKTIONEN
+ * 11. ADMIN-EINSTELLUNGSMENÜ LOGIK
+ * ============================================================================ */
+function openAdminModal() {
+    var savedAdminPw = sessionStorage.getItem('fc_admin_pw') || '';
+    document.getElementById('inp-admin-pw').value = savedAdminPw;
+    document.getElementById('inp-admin-wait').value = String(getWaitSeconds());
+    document.getElementById('inp-admin-max-moves').value = String(getMaxMovesPerDay());
+    document.getElementById('chk-admin-unlim-global').checked = !!state.settings.unlimited_moves_global;
+
+    var gameBox = document.getElementById('admin-current-game-box');
+    var isGameView = !document.getElementById('view-game').classList.contains('hidden');
+
+    if (isGameView && state.currentGame && state.currentGame.status === 'active') {
+        gameBox.classList.remove('hidden');
+        var wName = formatDisplayName(state.currentGame.white_player);
+        var bName = formatDisplayName(state.currentGame.black_player);
+        document.getElementById('lbl-admin-game-title').textContent = 'Aktuelle Partie: ' + wName + ' vs. ' + bName;
+        document.getElementById('chk-admin-unlim-game').checked = !!state.currentGame.unlimited_moves;
+    } else {
+        gameBox.classList.add('hidden');
+    }
+
+    var msgEl = document.getElementById('admin-status-msg');
+    msgEl.classList.add('hidden');
+    msgEl.textContent = '';
+
+    document.getElementById('modal-admin').classList.remove('hidden');
+}
+
+function showAdminFeedback(text, isError) {
+    var msgEl = document.getElementById('admin-status-msg');
+    msgEl.textContent = text;
+    msgEl.className = 'admin-msg ' + (isError ? 'err' : 'ok');
+    msgEl.classList.remove('hidden');
+}
+
+function saveAdminSettings() {
+    var adminPw = document.getElementById('inp-admin-pw').value;
+    if (!adminPw) {
+        showAdminFeedback('Bitte gib das Admin-Passwort ein.', true);
+        return;
+    }
+
+    var waitSec = parseInt(document.getElementById('inp-admin-wait').value, 10);
+    if (isNaN(waitSec) || waitSec < 0) waitSec = 0;
+
+    var maxMoves = parseInt(document.getElementById('inp-admin-max-moves').value, 10);
+    if (isNaN(maxMoves) || maxMoves < 1) maxMoves = 1;
+
+    var unlimGlobal = document.getElementById('chk-admin-unlim-global').checked;
+
+    var isGameView = !document.getElementById('view-game').classList.contains('hidden');
+    var currentGameId = (isGameView && state.currentGame) ? state.currentGame.id : null;
+    var unlimGame = document.getElementById('chk-admin-unlim-game').checked;
+
+    callRpc('rpc_admin_action', {
+        pw: state.password,
+        p_admin_pw: adminPw,
+        p_action: 'save_settings',
+        p_wait_seconds: waitSec,
+        p_max_moves: maxMoves,
+        p_unlim_global: unlimGlobal,
+        p_game_id: currentGameId,
+        p_game_unlim: unlimGame
+    }, function (err) {
+        if (err) {
+            showAdminFeedback(err, true);
+            return;
+        }
+        try { sessionStorage.setItem('fc_admin_pw', adminPw); } catch (e) {}
+        showAdminFeedback('✓ Einstellungen erfolgreich gespeichert!', false);
+
+        syncLobby(function () {
+            if (currentGameId) {
+                openGame(currentGameId);
+            }
+        });
+    });
+}
+
+function resetAdminCounters(onlyCurrentGame) {
+    var adminPw = document.getElementById('inp-admin-pw').value;
+    if (!adminPw) {
+        showAdminFeedback('Bitte gib zuerst das Admin-Passwort ein.', true);
+        return;
+    }
+
+    var targetGameId = (onlyCurrentGame && state.currentGame) ? state.currentGame.id : null;
+
+    callRpc('rpc_admin_action', {
+        pw: state.password,
+        p_admin_pw: adminPw,
+        p_action: 'reset_counters',
+        p_game_id: targetGameId
+    }, function (err) {
+        if (err) {
+            showAdminFeedback(err, true);
+            return;
+        }
+        try { sessionStorage.setItem('fc_admin_pw', adminPw); } catch (e) {}
+        showAdminFeedback(
+            onlyCurrentGame
+            ? '✓ Tages-Counter für diese Partie zurückgesetzt! Es kann sofort wieder gezogen werden.'
+            : '✓ Tages-Counter für ALLE aktiven Spiele zurückgesetzt!',
+            false
+        );
+
+        syncLobby(function () {
+            var isGameView = !document.getElementById('view-game').classList.contains('hidden');
+            if (isGameView && state.currentGame) {
+                openGame(state.currentGame.id);
+            }
+        });
+    });
+}
+
+/* ============================================================================
+ * 12. EVENT-LISTENER & HILFSFUNKTIONEN
  * ============================================================================ */
 function findPlayer(name) {
     for (var i = 0; i < state.players.length; i++) {
@@ -1660,9 +1837,9 @@ function findPlayer(name) {
 
 function escapeHtml(str) {
     return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -1671,7 +1848,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('btn-login').onclick = function () {
         attemptLogin(
             document.getElementById('inp-name').value,
-            document.getElementById('inp-pw').value
+                     document.getElementById('inp-pw').value
         );
     };
 
@@ -1680,6 +1857,20 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     document.getElementById('btn-push-toggle').onclick = enablePushNotifications;
+
+    // Admin-Buttons
+    document.getElementById('btn-admin-lobby').onclick = openAdminModal;
+    document.getElementById('btn-admin-game').onclick = openAdminModal;
+    document.getElementById('btn-close-admin').onclick = function () {
+        document.getElementById('modal-admin').classList.add('hidden');
+    };
+    document.getElementById('btn-admin-save').onclick = saveAdminSettings;
+    document.getElementById('btn-admin-reset-game').onclick = function () {
+        resetAdminCounters(true);
+    };
+    document.getElementById('btn-admin-reset-all').onclick = function () {
+        resetAdminCounters(false);
+    };
 
     document.getElementById('btn-logout').onclick = function () {
         localStorage.removeItem('fc_name');
@@ -1750,7 +1941,6 @@ document.addEventListener('DOMContentLoaded', function () {
         renderBoard();
     };
 
-    // Replay-Buttons für Zughistorie
     document.getElementById('btn-rep-start').onclick = function () {
         jumpToReplayPly(0);
     };
@@ -1811,8 +2001,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!state.currentGame || state.currentGame.status !== 'active') return;
         var isAbort = (state.currentGame.move_count <= 1);
         var msg = isAbort
-            ? 'Möchtest du die Partie wirklich vorzeitig abbrechen (ohne Elo-Änderung)?'
-            : 'Möchtest du die Partie wirklich aufgeben?';
+        ? 'Möchtest du die Partie wirklich vorzeitig abbrechen (ohne Elo-Änderung)?'
+        : 'Möchtest du die Partie wirklich aufgeben?';
 
         if (!confirm(msg)) return;
 
@@ -1865,7 +2055,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /* ============================================================================
- * 12. AUTOMATISCHES HOMESCREEN-APP-ICON (FÜR iOS & ANDROID GENERIEREN)
+ * 13. AUTOMATISCHES HOMESCREEN-APP-ICON (FÜR iOS & ANDROID GENERIEREN)
  * ============================================================================ */
 (function generateAppIcon() {
     try {
@@ -1909,9 +2099,8 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {}
 })();
 
-
 /* ============================================================================
- * 13. WEB-PUSH REGISTRIERUNG & VERSAND (ES5-KOMPATIBEL)
+ * 14. WEB-PUSH REGISTRIERUNG & VERSAND (ES5-KOMPATIBEL)
  * ============================================================================ */
 function urlBase64ToUint8Array(base64String) {
     var padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -1954,7 +2143,7 @@ function enablePushNotifications() {
         }, function (err) {
             if (err) {
                 alert('Fehler beim Speichern: ' + err);
-                btn.textContent = '🔔 Push';
+                btn.textContent = '🔔';
                 return;
             }
             btn.textContent = '🔔 Aktiv';
@@ -1963,7 +2152,7 @@ function enablePushNotifications() {
             alert('Push-Benachrichtigungen für ' + state.userName + ' sind jetzt auf diesem Gerät aktiv!');
         });
     }).catch(function (err) {
-        btn.textContent = '🔔 Push';
+        btn.textContent = '🔔';
         alert(err.message || 'Push konnte nicht aktiviert werden.');
     });
 }
@@ -1971,7 +2160,6 @@ function enablePushNotifications() {
 function sendPushToOpponent(targetPlayerName, messageBody, gameId) {
     if (!targetPlayerName || isBotPlayer(targetPlayerName)) return;
 
-    // Ruft die Supabase Edge Function auf (oder einen eigenen Webhook)
     var xhr = new XMLHttpRequest();
     xhr.open('POST', SUPABASE_URL + '/functions/v1/send-push', true);
     xhr.setRequestHeader('Content-Type', 'application/json');

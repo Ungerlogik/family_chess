@@ -1,0 +1,194 @@
+[
+  {
+    "table_name": "app_config",
+    "column_name": "key",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "app_config",
+    "column_name": "value",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "games",
+    "column_name": "id",
+    "data_type": "integer",
+    "column_default": "nextval('games_id_seq'::regclass)"
+  },
+  {
+    "table_name": "games",
+    "column_name": "white_player",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "games",
+    "column_name": "black_player",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "games",
+    "column_name": "fen",
+    "data_type": "text",
+    "column_default": "'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'::text"
+  },
+  {
+    "table_name": "games",
+    "column_name": "turn",
+    "data_type": "character",
+    "column_default": "'w'::bpchar"
+  },
+  {
+    "table_name": "games",
+    "column_name": "status",
+    "data_type": "text",
+    "column_default": "'active'::text"
+  },
+  {
+    "table_name": "games",
+    "column_name": "result_reason",
+    "data_type": "text",
+    "column_default": "''::text"
+  },
+  {
+    "table_name": "games",
+    "column_name": "white_last_move_date",
+    "data_type": "date",
+    "column_default": null
+  },
+  {
+    "table_name": "games",
+    "column_name": "black_last_move_date",
+    "data_type": "date",
+    "column_default": null
+  },
+  {
+    "table_name": "games",
+    "column_name": "last_move_uci",
+    "data_type": "text",
+    "column_default": "''::text"
+  },
+  {
+    "table_name": "games",
+    "column_name": "moves_history",
+    "data_type": "text",
+    "column_default": "''::text"
+  },
+  {
+    "table_name": "games",
+    "column_name": "draw_offered_by",
+    "data_type": "character",
+    "column_default": "NULL::bpchar"
+  },
+  {
+    "table_name": "games",
+    "column_name": "move_count",
+    "data_type": "integer",
+    "column_default": "0"
+  },
+  {
+    "table_name": "games",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "games",
+    "column_name": "move_history",
+    "data_type": "text",
+    "column_default": "''::text"
+  },
+  {
+    "table_name": "players",
+    "column_name": "id",
+    "data_type": "integer",
+    "column_default": "nextval('players_id_seq'::regclass)"
+  },
+  {
+    "table_name": "players",
+    "column_name": "name",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "players",
+    "column_name": "elo",
+    "data_type": "integer",
+    "column_default": "500"
+  },
+  {
+    "table_name": "players",
+    "column_name": "wins",
+    "data_type": "integer",
+    "column_default": "0"
+  },
+  {
+    "table_name": "players",
+    "column_name": "draws",
+    "data_type": "integer",
+    "column_default": "0"
+  },
+  {
+    "table_name": "players",
+    "column_name": "losses",
+    "data_type": "integer",
+    "column_default": "0"
+  },
+  {
+    "table_name": "players",
+    "column_name": "is_bot",
+    "data_type": "boolean",
+    "column_default": "false"
+  },
+  {
+    "table_name": "players",
+    "column_name": "bot_level",
+    "data_type": "integer",
+    "column_default": "0"
+  },
+  {
+    "table_name": "players",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "push_subscriptions",
+    "column_name": "id",
+    "data_type": "uuid",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "push_subscriptions",
+    "column_name": "player_name",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "push_subscriptions",
+    "column_name": "endpoint",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "push_subscriptions",
+    "column_name": "p256dh",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "push_subscriptions",
+    "column_name": "auth",
+    "data_type": "text",
+    "column_default": null
+  },
+  {
+    "table_name": "push_subscriptions",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "column_default": "now()"
+  }
+]
