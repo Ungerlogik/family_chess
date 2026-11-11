@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Schach">
 
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <!-- Bewährte ES5-kompatible chess.js Version für Regelprüfung (läuft auch auf iOS 10) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 </head>
@@ -219,66 +219,100 @@
       <!-- Gefahren-Warnung (Patzer-Schutz in der Sandkasten-Phase) -->
       <div id="blunder-warning" class="warning-banner hidden"></div>
 
-      <!-- Haupt-Steuerung für den Sandkasten & Zug -->
-      <div id="sandbox-controls" class="control-row">
-        <button id="btn-undo-sandbox" class="btn btn-secondary" disabled>← 1 Zug zurück</button>
-        <button id="btn-reset-sandbox" class="btn btn-secondary" disabled>↺ Zurücksetzen</button>
-        <button id="btn-arrow-mode" class="btn btn-secondary">↗ Pfeil: AUS</button>
-        <button id="btn-clear-arrows" class="btn btn-outline">✕ Pfeile</button>
+      <!-- Brett-Werkzeuge: Zurück, Drehen, Pfeile -->
+      <div id="sandbox-controls" class="control-row board-tools">
+        <button id="btn-undo-sandbox" class="btn btn-secondary btn-small" disabled>← 1 Zug zurück</button>
+        <button id="btn-reset-sandbox" class="btn btn-secondary btn-small" disabled>↺ Zurücksetzen</button>
+        <button id="btn-flip-board" class="btn btn-secondary btn-small" title="Brett um 180° drehen">🔄 Brett drehen</button>
+        <button id="btn-arrow-mode" class="btn btn-secondary btn-small">↗ Pfeil: AUS</button>
+        <button id="btn-clear-arrows" class="btn btn-outline btn-small">✕ Pfeile</button>
       </div>
 
       <button id="btn-submit-move" class="btn btn-confirm btn-block" disabled>
         Zug endgültig absenden
       </button>
 
-      <!-- Kompakte Zughistorie & Vor-/Zurück-Navigation -->
-      <div id="move-history-card" class="card history-replay-card">
-        <div class="section-header">
-          <h3>📋 Zughistorie &amp; Verlauf</h3>
-          <span id="lbl-replay-step" class="count-pill">Aktuell</span>
-        </div>
-        <div id="move-list-strip" class="move-list-strip">Noch keine Züge gespielt.</div>
-        <div class="control-row replay-controls">
-          <button id="btn-rep-start" class="btn btn-secondary btn-small" title="Zum Start">⏮ Start</button>
-          <button id="btn-rep-prev" class="btn btn-secondary btn-small" title="1 Halbzug zurück">◀ Zurück</button>
-          <button id="btn-rep-next" class="btn btn-secondary btn-small" title="1 Halbzug vor">Vor ▶</button>
-          <button id="btn-rep-end" class="btn btn-secondary btn-small" title="Zur aktuellen Stellung">Aktuell ⏭</button>
+      <!-- Reiter unter dem Brett: Verlauf / Chat / Hilfen -->
+      <nav class="info-tabs">
+        <button class="info-tab active" data-info="info-moves">📋 Verlauf</button>
+        <button class="info-tab" data-info="info-chat">💬 Chat <span id="chat-unread-badge" class="unread-badge hidden">0</span></button>
+        <button class="info-tab" data-info="info-helpers">🎓 Hilfen</button>
+      </nav>
+
+      <!-- Reiter 1: Zughistorie & Vor-/Zurück-Navigation -->
+      <div id="info-moves" class="info-pane">
+        <div id="move-history-card" class="card history-replay-card">
+          <div class="section-header">
+            <h3>📋 Zughistorie &amp; Verlauf</h3>
+            <span id="lbl-replay-step" class="count-pill">Aktuell</span>
+          </div>
+          <div id="move-list-strip" class="move-list-strip">Noch keine Züge gespielt.</div>
+          <div class="control-row replay-controls">
+            <button id="btn-rep-start" class="btn btn-secondary btn-small" title="Zum Start">⏮ Start</button>
+            <button id="btn-rep-prev" class="btn btn-secondary btn-small" title="1 Halbzug zurück">◀ Zurück</button>
+            <button id="btn-rep-next" class="btn btn-secondary btn-small" title="1 Halbzug vor">Vor ▶</button>
+            <button id="btn-rep-end" class="btn btn-secondary btn-small" title="Zur aktuellen Stellung">Aktuell ⏭</button>
+          </div>
         </div>
       </div>
 
-      <!-- Lern-Hilfen (Ein-/Ausschaltbar) -->
-      <div class="card helpers-card">
-        <h3>🎓 Lern-Hilfen (Vertrauensbasis)</h3>
-        <div class="helpers-grid">
-          <label class="toggle-item">
-            <input type="checkbox" id="chk-legal" checked>
-            <span>Mögliche Züge (Punkte)</span>
-          </label>
-          <label class="toggle-item">
-            <input type="checkbox" id="chk-lastmove" checked>
-            <span>Letzten Zug zeigen</span>
-          </label>
-          <label class="toggle-item">
-            <input type="checkbox" id="chk-material" checked>
-            <span>Material &amp; Schlagbeute</span>
-          </label>
-          <label class="toggle-item">
-            <input type="checkbox" id="chk-heatmap">
-            <span>Feld-Dominanz (Heatmap)</span>
-          </label>
-          <label class="toggle-item sandbox-only" id="lbl-chk-radar">
-            <input type="checkbox" id="chk-radar" checked>
-            <span>⏱️ Bedrohungs-Radar</span>
-          </label>
-          <label class="toggle-item sandbox-only" id="lbl-chk-blunder">
-            <input type="checkbox" id="chk-blunder" checked>
-            <span>⏱️ Patzer-Warnung</span>
-          </label>
+      <!-- Reiter 2: Partie-Chat -->
+      <div id="info-chat" class="info-pane hidden">
+        <div class="card chat-card">
+          <div class="section-header">
+            <h3>💬 Partie-Chat</h3>
+            <span id="chat-hint" class="chat-hint"></span>
+          </div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div id="chat-status" class="chat-status"></div>
+          <div class="chat-quick-row">
+            <button class="chat-quick" data-text="Hallo! 👋">👋 Hallo</button>
+            <button class="chat-quick" data-text="Gut gespielt! 👍">👍 Gut gespielt</button>
+            <button class="chat-quick" data-text="Hmm, interessant… 🤔">🤔 Hmm…</button>
+            <button class="chat-quick" data-text="Du bist dran! ⏳">⏳ Du bist dran!</button>
+          </div>
+          <div class="chat-input-row">
+            <input type="text" id="inp-chat" maxlength="200" placeholder="Kurze Nachricht…" autocomplete="off">
+            <button id="btn-chat-send" class="btn btn-primary btn-small">Senden</button>
+          </div>
         </div>
-        <div id="heatmap-legend" class="heatmap-legend hidden">
-          <span class="legend-item"><i class="legend-tri mine"></i> Dein Übergewicht (+1/+2)</span>
-          <span class="legend-item"><i class="legend-tri opp"></i> Gegner-Übergewicht (-1/-2)</span>
-          <span class="legend-item">Gleichstand = neutral</span>
+      </div>
+
+      <!-- Reiter 3: Lern-Hilfen -->
+      <div id="info-helpers" class="info-pane hidden">
+        <div class="card helpers-card">
+          <h3>🎓 Lern-Hilfen (Vertrauensbasis)</h3>
+          <div class="helpers-grid">
+            <label class="toggle-item">
+              <input type="checkbox" id="chk-legal" checked>
+              <span>Mögliche Züge (Punkte)</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" id="chk-lastmove" checked>
+              <span>Letzten Zug zeigen</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" id="chk-material" checked>
+              <span>Material &amp; Schlagbeute</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" id="chk-heatmap">
+              <span>Feld-Dominanz (Heatmap)</span>
+            </label>
+            <label class="toggle-item sandbox-only" id="lbl-chk-radar">
+              <input type="checkbox" id="chk-radar" checked>
+              <span>⏱️ Bedrohungs-Radar</span>
+            </label>
+            <label class="toggle-item sandbox-only" id="lbl-chk-blunder">
+              <input type="checkbox" id="chk-blunder" checked>
+              <span>⏱️ Patzer-Warnung</span>
+            </label>
+          </div>
+          <div id="heatmap-legend" class="heatmap-legend hidden">
+            <span class="legend-item"><i class="legend-tri mine"></i> Dein Übergewicht (+1/+2)</span>
+            <span class="legend-item"><i class="legend-tri opp"></i> Gegner-Übergewicht (-1/-2)</span>
+            <span class="legend-item">Gleichstand = neutral</span>
+          </div>
         </div>
       </div>
 
@@ -319,6 +353,8 @@
         <li><strong>Zughistorie &amp; Nachspielen:</strong> Über die Leiste <em>„📋 Zughistorie“</em> kannst du frühere Züge der Partie Schritt für Schritt vor- und zurückblättern.</li>
         <li><strong>Feld-Dominanz (Heatmap):</strong> Zeigt über scharfe Eck-Dreiecke und kleine Zahlen (<code>+1</code>, <code>-2</code>) nur Felder mit echter Überzahl an.</li>
         <li><strong>Zug absenden:</strong> Nach Ablauf der Bedenkzeit muss genau <strong>dein 1 geplanter Zug</strong> auf dem Brett stehen – dann wird der grüne Bestätigen-Button aktiv.</li>
+        <li><strong>Brett drehen:</strong> Mit „🔄 Brett drehen“ siehst du das Brett aus Sicht deines Gegners. Das ist nur eine Ansicht und ändert nichts am Spiel.</li>
+        <li><strong>Chat:</strong> Im Reiter „💬 Chat“ könnt ihr euch kurze Nachrichten schicken (max. 200 Zeichen). Bei aktiven Benachrichtigungen bekommt der Gegner zusätzlich einen Push.</li>
       </ul>
 
       <h3>📖 Familien-Regeln &amp; Botgnus</h3>
@@ -378,6 +414,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

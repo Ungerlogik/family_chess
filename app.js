@@ -39,7 +39,17 @@ var state = {
     activeTab: 'tab-home',
     historyFilter: 'all', // 'all', 'win', 'draw', 'loss'
     gamePlies: [],        // Gespeicherte Halbzüge der Partie für Zughistorie/Replay
-    replayIndex: 0        // Aktuell angezeigter Halbzug-Index im Replay
+    replayIndex: 0,       // Aktuell angezeigter Halbzug-Index im Replay
+    boardFlipped: false,  // Brett um 180° gedreht (nur Anzeige, ändert nichts am Spiel)
+    activeInfoTab: 'info-moves', // Aktiver Reiter unter dem Brett (Verlauf / Chat / Hilfen)
+    chat: {               // Zustand des Partie-Chats (siehe Abschnitt 15)
+        gameId: null,
+        messages: [],
+        lastId: 0,
+        loading: false,
+        pollTimer: null,
+        forceScroll: false
+    }
 };
 
 // Hochwertige, gestochen scharfe Inline-SVG-Schachfiguren
@@ -273,6 +283,7 @@ function attemptLogin(name, pw) {
 
         applySyncData(data);
         showView('view-lobby');
+        syncPushOnStart();
     });
 }
 
@@ -309,6 +320,7 @@ function applySyncData(data) {
 }
 
 function showView(viewId) {
+    if (viewId !== 'view-game') stopChatPolling();
     var views = ['view-login', 'view-lobby', 'view-game'];
     for (var i = 0; i < views.length; i++) {
         var el = document.getElementById(views[i]);
@@ -763,7 +775,9 @@ function openGame(gameId) {
     }
     if (!g) return;
 
+    var sameGame = !!(state.currentGame && state.currentGame.id === g.id);
     state.currentGame = g;
+    if (!sameGame) state.boardFlipped = false;
     state.baseFen = g.fen;
     state.chess = new Chess(g.fen);
     state.mySide = (g.white_player === state.userName) ? 'w' : 'b';
@@ -774,6 +788,7 @@ function openGame(gameId) {
     buildGameMoveHistory(g);
 
     showView('view-game');
+    startChatForGame(g);
 
     var currentTurnPlayer = (g.turn === 'w') ? g.white_player : g.black_player;
     if (g.status === 'active' && isBotPlayer(currentTurnPlayer)) {
@@ -909,10 +924,8 @@ function setupGameUI() {
 
     document.getElementById('game-title-bar').textContent = wName + ' vs. ' + bName;
 
-    var topName = (state.mySide === 'w') ? bName + ' (Schwarz)' : wName + ' (Weiß)';
-    var botName = (state.mySide === 'w') ? wName + ' (Weiß)' : bName + ' (Schwarz)';
-    document.getElementById('lbl-top-player').textContent = topName;
-    document.getElementById('lbl-bottom-player').textContent = botName;
+    updatePlayerLabels();
+    updateFlipButton();
 
     var banner = document.getElementById('turn-banner');
     banner.className = 'turn-banner';
@@ -970,6 +983,44 @@ function setupGameUI() {
 /* ============================================================================
  * 6. SCHACHBRETT RENDERN & KOMBI-HEATMAP / SCHACH-WARNUNG
  * ============================================================================ */
+/* Welche Farbe steht UNTEN auf dem Bildschirm? Normalerweise die eigene,
+   nach "Brett drehen" die gegnerische. Wird nur für die Anzeige genutzt –
+   alle Spiellogik bleibt bei state.mySide. */
+function getViewSide() {
+    if (!state.boardFlipped) return state.mySide;
+    return (state.mySide === 'w') ? 'b' : 'w';
+}
+
+function describePlayerSide(color) {
+    var g = state.currentGame;
+    var rawName = (color === 'w') ? g.white_player : g.black_player;
+    var colorLabel = (color === 'w') ? 'Weiß' : 'Schwarz';
+    var isMe = (color === state.mySide);
+    return formatDisplayName(rawName) + ' (' + colorLabel + ')' + (isMe ? ' · Du' : '');
+}
+
+function updatePlayerLabels() {
+    if (!state.currentGame) return;
+    var bottomColor = getViewSide();
+    var topColor = (bottomColor === 'w') ? 'b' : 'w';
+    document.getElementById('lbl-bottom-player').textContent = describePlayerSide(bottomColor);
+    document.getElementById('lbl-top-player').textContent = describePlayerSide(topColor);
+}
+
+function updateFlipButton() {
+    var btn = document.getElementById('btn-flip-board');
+    if (!btn) return;
+    if (state.boardFlipped) btn.classList.add('btn-active-mode');
+    else btn.classList.remove('btn-active-mode');
+}
+
+function toggleBoardFlip() {
+    state.boardFlipped = !state.boardFlipped;
+    updateFlipButton();
+    updatePlayerLabels();
+    renderBoard();
+}
+
 function renderBoard() {
     var boardEl = document.getElementById('chessboard');
     boardEl.innerHTML = '';
@@ -1005,8 +1056,8 @@ function renderBoard() {
     var files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
     for (var r = 0; r < 8; r++) {
         for (var c = 0; c < 8; c++) {
-            var rank = (state.mySide === 'w') ? (8 - r) : (r + 1);
-            var fileIndex = (state.mySide === 'w') ? c : (7 - c);
+            var rank = (getViewSide() === 'w') ? (8 - r) : (r + 1);
+            var fileIndex = (getViewSide() === 'w') ? c : (7 - c);
             var sqName = files[fileIndex] + rank;
 
             var sqDiv = document.createElement('div');
@@ -1339,17 +1390,18 @@ function updateMaterialDisplay(showMat) {
     }
 
     var diff = wScore - bScore;
-    var myAdv = (state.mySide === 'w') ? diff : -diff;
-    var myCaptured = (state.mySide === 'w') ? capturedByW : capturedByB;
-    var oppCaptured = (state.mySide === 'w') ? capturedByB : capturedByW;
+    var bottomColor = getViewSide();
+    var bottomAdv = (bottomColor === 'w') ? diff : -diff;
+    var bottomCaptured = (bottomColor === 'w') ? capturedByW : capturedByB;
+    var topCaptured = (bottomColor === 'w') ? capturedByB : capturedByW;
 
-    var botText = myCaptured;
-    var topText = oppCaptured;
+    var botText = bottomCaptured;
+    var topText = topCaptured;
 
-    if (myAdv > 0) {
-        botText += (botText ? ' ' : '') + '(+' + myAdv + ')';
-    } else if (myAdv < 0) {
-        topText += (topText ? ' ' : '') + '(+' + Math.abs(myAdv) + ')';
+    if (bottomAdv > 0) {
+        botText += (botText ? ' ' : '') + '(+' + bottomAdv + ')';
+    } else if (bottomAdv < 0) {
+        topText += (topText ? ' ' : '') + '(+' + Math.abs(bottomAdv) + ')';
     } else if (!botText && !topText) {
         botText = 'Ausgeglichen (0)';
     }
@@ -1381,8 +1433,8 @@ function sqToCoords(sq) {
     var f = files.indexOf(sq.charAt(0));
     var r = parseInt(sq.charAt(1), 10);
 
-    var col = (state.mySide === 'w') ? f : (7 - f);
-    var row = (state.mySide === 'w') ? (8 - r) : (r - 1);
+    var col = (getViewSide() === 'w') ? f : (7 - f);
+    var row = (getViewSide() === 'w') ? (8 - r) : (r - 1);
 
     return { x: col * 100 + 50, y: row * 100 + 50 };
 }
@@ -2046,6 +2098,35 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
+    // Brett drehen
+    document.getElementById('btn-flip-board').onclick = toggleBoardFlip;
+
+    // Reiter unter dem Brett (Verlauf / Chat / Hilfen)
+    var infoBtns = document.querySelectorAll('.info-tab');
+    for (var it = 0; it < infoBtns.length; it++) {
+        infoBtns[it].onclick = function () {
+            switchInfoTab(this.getAttribute('data-info'));
+        };
+    }
+
+    // Chat: Senden per Button oder Enter
+    document.getElementById('btn-chat-send').onclick = function () {
+        sendChatMessage(document.getElementById('inp-chat').value);
+    };
+    document.getElementById('inp-chat').onkeydown = function (e) {
+        var ev = e || window.event;
+        if (ev.keyCode === 13 || ev.key === 'Enter') {
+            if (ev.preventDefault) ev.preventDefault();
+            sendChatMessage(this.value);
+        }
+    };
+    var quickBtns = document.querySelectorAll('.chat-quick');
+    for (var qb = 0; qb < quickBtns.length; qb++) {
+        quickBtns[qb].onclick = function () {
+            sendChatMessage(this.getAttribute('data-text'));
+        };
+    }
+
     document.getElementById('btn-rules-modal').onclick = function () {
         document.getElementById('modal-rules').classList.remove('hidden');
     };
@@ -2113,47 +2194,103 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-function enablePushNotifications() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        alert('Dein Browser unterstützt leider keine Web-Push-Benachrichtigungen. (Tipp auf iPhone: Erst über „Teilen -> Zum Home-Bildschirm“ hinzufügen!)');
+function getPushSupport() {
+    return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+}
+
+// Zeigt den 🔔-Button im richtigen Zustand (aktiv = Abo ist auf diesem Gerät vorhanden)
+function setPushButtonState(active) {
+    var btn = document.getElementById('btn-push-toggle');
+    if (!btn) return;
+    btn.textContent = '🔔';
+    if (active) {
+        btn.classList.add('btn-active-mode');
+        btn.title = 'Push-Benachrichtigungen sind aktiv';
+    } else {
+        btn.classList.remove('btn-active-mode');
+        btn.title = 'Push-Benachrichtigungen aktivieren';
+    }
+}
+
+// Speichert das aktuelle Abo für den eingeloggten Spieler auf dem Server
+function saveSubscriptionToServer(subscription, callback) {
+    var subJson = subscription.toJSON();
+    callRpc('rpc_save_push_sub', {
+        pw: state.password,
+        p_player: state.userName,
+        p_endpoint: subJson.endpoint,
+        p_p256dh: subJson.keys.p256dh,
+        p_auth: subJson.keys.auth
+    }, function (err) {
+        callback(err || null);
+    });
+}
+
+/* Wird genau EINMAL pro App-Start aufgerufen (direkt nach dem Login).
+   Es wird KEINE Erlaubnis angefragt (das geht auf dem iPhone nur per Tipp).
+   Ist die Erlaubnis schon erteilt, wird das Abo geholt bzw. neu angelegt und
+   beim Server aktualisiert – so bleibt die Benachrichtigung auch nach einem Neustart erhalten. */
+function syncPushOnStart() {
+    if (!getPushSupport() || !state.userName || !state.password) return;
+
+    if (Notification.permission !== 'granted') {
+        setPushButtonState(false);
         return;
     }
 
-    var btn = document.getElementById('btn-push-toggle');
-    btn.textContent = '⏳...';
-
     navigator.serviceWorker.register('./sw.js').then(function (registration) {
-        return Notification.requestPermission().then(function (permission) {
-            if (permission !== 'granted') {
-                throw new Error('Benachrichtigungen wurden nicht erlaubt.');
-            }
+        return registration.pushManager.getSubscription().then(function (existing) {
+            if (existing) return existing;
             return registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
             });
         });
     }).then(function (subscription) {
-        var subJson = subscription.toJSON();
-        callRpc('rpc_save_push_sub', {
-            pw: state.password,
-            p_player: state.userName,
-            p_endpoint: subJson.endpoint,
-            p_p256dh: subJson.keys.p256dh,
-            p_auth: subJson.keys.auth
-        }, function (err) {
+        saveSubscriptionToServer(subscription, function (err) {
+            setPushButtonState(!err);
+        });
+    }).catch(function () {
+        setPushButtonState(false);
+    });
+}
+
+// Wird nur durch einen Klick auf den 🔔-Button ausgelöst
+function enablePushNotifications() {
+    if (!getPushSupport()) {
+        alert('Dein Browser unterstützt leider keine Web-Push-Benachrichtigungen. (Tipp auf iPhone: Erst über „Teilen -> Zum Home-Bildschirm“ hinzufügen!)');
+        return;
+    }
+
+    var btn = document.getElementById('btn-push-toggle');
+    btn.textContent = '⏳';
+
+    navigator.serviceWorker.register('./sw.js').then(function (registration) {
+        return Notification.requestPermission().then(function (permission) {
+            if (permission !== 'granted') {
+                throw new Error('Benachrichtigungen wurden nicht erlaubt.');
+            }
+            return registration.pushManager.getSubscription().then(function (existing) {
+                if (existing) return existing;
+                return registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                });
+            });
+        });
+    }).then(function (subscription) {
+        saveSubscriptionToServer(subscription, function (err) {
             if (err) {
+                setPushButtonState(false);
                 alert('Fehler beim Speichern: ' + err);
-                btn.textContent = '🔔';
                 return;
             }
-            btn.textContent = '🔔';
-            btn.classList.add('btn-active-mode');
-            localStorage.setItem('fc_push_enabled', '1');
+            setPushButtonState(true);
             alert('Push-Benachrichtigungen für ' + state.userName + ' sind jetzt auf diesem Gerät aktiv!');
         });
     }).catch(function (err) {
-        btn.textContent = '🔔';
-        alert(err.message || 'Push konnte nicht aktiviert werden.');
+        setPushButtonState(false);
+        alert((err && err.message) || 'Push konnte nicht aktiviert werden.');
     });
 }
 
@@ -2170,4 +2307,238 @@ function sendPushToOpponent(targetPlayerName, messageBody, gameId) {
         body: messageBody,
         gameId: gameId
     }));
+}
+
+
+/* ============================================================================
+ * 15. PARTIE-CHAT & REITER UNTER DEM BRETT
+ *     Nachrichten laufen über die RPC-Funktionen rpc_get_chat / rpc_send_chat.
+ *     Solange eine Partie offen ist, wird alle 5 Sekunden nach neuen Nachrichten gefragt.
+ * ============================================================================ */
+var CHAT_POLL_MS = 5000;
+var CHAT_MAX_LEN = 200;
+
+function switchInfoTab(tabId) {
+    state.activeInfoTab = tabId;
+
+    var panes = ['info-moves', 'info-chat', 'info-helpers'];
+    for (var i = 0; i < panes.length; i++) {
+        var paneEl = document.getElementById(panes[i]);
+        if (panes[i] === tabId) paneEl.classList.remove('hidden');
+        else paneEl.classList.add('hidden');
+    }
+
+    var btns = document.querySelectorAll('.info-tab');
+    for (var j = 0; j < btns.length; j++) {
+        if (btns[j].getAttribute('data-info') === tabId) btns[j].classList.add('active');
+        else btns[j].classList.remove('active');
+    }
+
+    if (tabId === 'info-chat') {
+        state.chat.forceScroll = true;
+        markChatRead();
+        renderChatMessages();
+    }
+    updateChatUnreadBadge();
+}
+
+function isChatTabOpen() {
+    return state.activeInfoTab === 'info-chat' &&
+        !document.getElementById('view-game').classList.contains('hidden');
+}
+
+function getOpponentNameOfGame(g) {
+    if (!g) return '';
+    return (g.white_player === state.userName) ? g.black_player : g.white_player;
+}
+
+// Merkt sich, bis zu welcher Nachricht gelesen wurde (für den Zähler am Reiter)
+function markChatRead() {
+    if (state.chat.gameId === null || state.chat.lastId <= 0 || !isChatTabOpen()) return;
+    try { localStorage.setItem('fc_chat_seen_' + state.chat.gameId, String(state.chat.lastId)); } catch (e) {}
+}
+
+function countChatUnread() {
+    if (state.chat.gameId === null || isChatTabOpen()) return 0;
+    var seen = parseInt(localStorage.getItem('fc_chat_seen_' + state.chat.gameId) || '0', 10) || 0;
+    var n = 0;
+    for (var i = 0; i < state.chat.messages.length; i++) {
+        var m = state.chat.messages[i];
+        if (m.id > seen && m.sender !== state.userName) n++;
+    }
+    return n;
+}
+
+function updateChatUnreadBadge() {
+    var badge = document.getElementById('chat-unread-badge');
+    if (!badge) return;
+    var n = countChatUnread();
+    badge.textContent = String(n);
+    if (n > 0) badge.classList.remove('hidden');
+    else badge.classList.add('hidden');
+}
+
+function setChatStatus(text, isError) {
+    var el = document.getElementById('chat-status');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = isError ? 'chat-status err' : 'chat-status';
+}
+
+function formatChatTime(ts) {
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    var hh = d.getHours();
+    var mm = d.getMinutes();
+    return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+}
+
+function updateChatInputState() {
+    var g = state.currentGame;
+    var active = !!(g && g.status === 'active');
+    var isBot = !!(g && isBotPlayer(getOpponentNameOfGame(g)));
+
+    document.getElementById('inp-chat').disabled = !active;
+    document.getElementById('btn-chat-send').disabled = !active;
+    var quick = document.querySelectorAll('.chat-quick');
+    for (var q = 0; q < quick.length; q++) quick[q].disabled = !active;
+
+    var hint = document.getElementById('chat-hint');
+    if (!active) hint.textContent = 'Partie beendet – nur Lesen';
+    else if (isBot) hint.textContent = '🤖 Botgnus antwortet nicht im Chat';
+    else hint.textContent = 'max. ' + CHAT_MAX_LEN + ' Zeichen';
+}
+
+function renderChatMessages() {
+    var box = document.getElementById('chat-messages');
+    var msgs = state.chat.messages;
+
+    if (msgs.length === 0) {
+        box.innerHTML = '<p class="hint chat-empty">Noch keine Nachrichten. Schreib die erste! 💬</p>';
+        return;
+    }
+
+    var nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 60;
+    var html = '';
+    for (var i = 0; i < msgs.length; i++) {
+        var m = msgs[i];
+        var mine = (m.sender === state.userName);
+        html +=
+        '<div class="chat-row ' + (mine ? 'mine' : 'theirs') + '">' +
+        '<div class="chat-bubble">' +
+        (mine ? '' : '<div class="chat-sender">' + escapeHtml(formatDisplayName(m.sender)) + '</div>') +
+        '<div class="chat-text">' + escapeHtml(m.body) + '</div>' +
+        '<div class="chat-time">' + formatChatTime(m.ts) + '</div>' +
+        '</div></div>';
+    }
+    box.innerHTML = html;
+
+    if (state.chat.forceScroll || nearBottom) box.scrollTop = box.scrollHeight;
+    state.chat.forceScroll = false;
+}
+
+function startChatForGame(g) {
+    if (state.chat.gameId !== g.id) {
+        state.chat.gameId = g.id;
+        state.chat.messages = [];
+        state.chat.lastId = 0;
+        state.chat.loading = false;
+        state.chat.forceScroll = true;
+        document.getElementById('inp-chat').value = '';
+        renderChatMessages();
+    }
+    updateChatInputState();
+    updateChatUnreadBadge();
+
+    stopChatPolling();
+    fetchChatMessages();
+    state.chat.pollTimer = setInterval(fetchChatMessages, CHAT_POLL_MS);
+}
+
+function stopChatPolling() {
+    if (state.chat.pollTimer) {
+        clearInterval(state.chat.pollTimer);
+        state.chat.pollTimer = null;
+    }
+}
+
+// Holt nur Nachrichten, die neuer sind als die letzte bekannte (keine Dubletten)
+function fetchChatMessages() {
+    if (state.chat.gameId === null || state.chat.loading) return;
+    var gameId = state.chat.gameId;
+    state.chat.loading = true;
+
+    callRpc('rpc_get_chat', {
+        pw: state.password,
+        p_game_id: String(gameId),
+        p_player: state.userName,
+        p_after_id: state.chat.lastId
+    }, function (err, rows) {
+        state.chat.loading = false;
+        if (state.chat.gameId !== gameId) return; // inzwischen andere Partie geöffnet
+
+        if (err) {
+            setChatStatus('Chat nicht erreichbar: ' + err, true);
+            return;
+        }
+        setChatStatus('');
+
+        var list = rows || [];
+        var added = false;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id > state.chat.lastId) {
+                state.chat.messages.push(list[i]);
+                state.chat.lastId = list[i].id;
+                added = true;
+            }
+        }
+
+        if (added && isChatTabOpen()) {
+            markChatRead();
+            renderChatMessages();
+        }
+        updateChatUnreadBadge();
+    });
+}
+
+function sendChatMessage(rawText) {
+    var g = state.currentGame;
+    if (!g || g.status !== 'active' || state.chat.gameId === null) return;
+
+    var text = String(rawText || '').replace(/^\s+|\s+$/g, '');
+    if (!text) return;
+    if (text.length > CHAT_MAX_LEN) text = text.substring(0, CHAT_MAX_LEN);
+
+    var gameId = g.id;
+    document.getElementById('btn-chat-send').disabled = true;
+
+    callRpc('rpc_send_chat', {
+        pw: state.password,
+        p_game_id: String(gameId),
+        p_player: state.userName,
+        p_body: text
+    }, function (err, row) {
+        updateChatInputState();
+        if (err) {
+            setChatStatus('Nicht gesendet: ' + err, true);
+            return;
+        }
+        if (state.chat.gameId !== gameId) return;
+
+        setChatStatus('');
+        if (row && row.id > state.chat.lastId) {
+            state.chat.messages.push(row);
+            state.chat.lastId = row.id;
+        }
+        document.getElementById('inp-chat').value = '';
+        state.chat.forceScroll = true;
+        if (isChatTabOpen()) {
+            markChatRead();
+            renderChatMessages();
+        }
+        updateChatUnreadBadge();
+
+        // Gegner per Push informieren (Bot wird automatisch übersprungen)
+        sendPushToOpponent(getOpponentNameOfGame(g), '💬 ' + state.userName + ': ' + text.substring(0, 100), gameId);
+    });
 }
